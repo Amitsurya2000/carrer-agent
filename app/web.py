@@ -22,7 +22,7 @@ from app.db import get_supabase
 from app.discover import discover as run_discovery
 from app.profile_store import get_active, list_profiles, set_active, upload_profile
 from app.resume import derive_queries, extract_text
-from app.score import keyword_score, score_pending_keyword
+from app.score import score_pending_keyword
 
 _PROJ = Path(__file__).resolve().parent.parent
 
@@ -56,38 +56,154 @@ router = APIRouter()
 _ALLOWED = (".pdf", ".docx", ".doc", ".txt", ".md", ".rtf")
 _EXPIRE_DAYS = 30
 
-_CSS = """
+# In-memory snapshot of the most recent filter selections — used by _page() to
+# render the active-filter pills and to apply post-scrape display filters
+# (min salary, required skills, sort). Lives only in this process; resets on
+# server restart. Good enough for a single-user local app.
+_LAST_FILTERS: dict[str, str] = {}
+
+_HEAD = """
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎯%3C/text%3E%3C/svg%3E">
 <style>
- body{font-family:system-ui,Segoe UI,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#222}
- h1{margin-bottom:.2rem}h3{margin:.2rem 0}.muted{color:#777;font-size:.9rem}
- .card{border:1px solid #ddd;border-radius:8px;padding:1rem 1.2rem;margin:1rem 0}
- table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #eee;font-size:.92rem}
- .score{font-weight:700}.active{color:#0a7d28;font-weight:700}
- button{padding:5px 10px;border-radius:6px;border:1px solid #888;background:#f6f6f6;cursor:pointer}
- .row{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+ :root{
+   --bg:#f5f6fa;--surface:#fff;--surface-alt:#fafbfc;
+   --text:#1a1d29;--text-muted:#6b7280;
+   --primary:#4f46e5;--primary-hover:#4338ca;--primary-light:#eef2ff;
+   --accent:#10b981;--warn:#f59e0b;--danger:#ef4444;--info:#06b6d4;
+   --border:#e5e7eb;
+   --shadow-sm:0 1px 2px rgba(15,23,42,.04);
+   --shadow:0 4px 16px rgba(15,23,42,.06);
+   --shadow-lg:0 12px 28px rgba(15,23,42,.10);
+   --radius:14px;--radius-sm:8px;
+ }
+ [data-theme='dark']{
+   --bg:#0b0d14;--surface:#161922;--surface-alt:#1c2030;
+   --text:#e5e7eb;--text-muted:#9ca3af;
+   --primary:#818cf8;--primary-hover:#a5b4fc;--primary-light:#1e1b4b;
+   --border:#2d3142;
+   --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+   --shadow:0 4px 16px rgba(0,0,0,.5);
+   --shadow-lg:0 12px 28px rgba(0,0,0,.6);
+ }
+ *{box-sizing:border-box}
+ body{
+   font-family:'Inter',system-ui,-apple-system,Segoe UI,sans-serif;
+   background:var(--bg);color:var(--text);
+   max-width:1180px;margin:0 auto;padding:1.5rem;line-height:1.55;
+   -webkit-font-smoothing:antialiased;transition:background .2s,color .2s;
+ }
+ h1,h3{font-weight:700;letter-spacing:-.01em}
+ h1{margin:0;font-size:1.85rem}
+ h3{margin:0 0 1.1rem;font-size:1.1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem}
+ .muted{color:var(--text-muted);font-size:.88rem}
+
+ .hero{
+   background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 50%,#ec4899 100%);
+   color:#fff;border-radius:var(--radius);
+   padding:1.6rem 2rem;margin-bottom:1.4rem;box-shadow:var(--shadow-lg);
+   display:flex;justify-content:space-between;align-items:center;
+   flex-wrap:wrap;gap:1rem;
+ }
+ .hero-title{display:flex;align-items:center;gap:.7rem}
+ .hero h1{color:#fff}
+ .hero-subtitle{margin:.3rem 0 0;opacity:.92;font-size:.95rem;font-weight:400}
+ .theme-toggle{
+   background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.25);
+   padding:9px 14px;border-radius:999px;cursor:pointer;font-size:1.1rem;
+   backdrop-filter:blur(8px);transition:all .15s;
+ }
+ .theme-toggle:hover{background:rgba(255,255,255,.3);transform:translateY(-1px)}
+
+ .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:.9rem;margin-bottom:1.4rem}
+ .stat{
+   background:var(--surface);border-radius:var(--radius-sm);
+   padding:1rem 1.1rem;box-shadow:var(--shadow-sm);
+   border:1px solid var(--border);border-left:4px solid var(--border);
+   transition:transform .15s, box-shadow .15s;
+ }
+ .stat:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+ .stat.primary{border-left-color:var(--primary)}
+ .stat.success{border-left-color:var(--accent)}
+ .stat.warn   {border-left-color:var(--warn)}
+ .stat.info   {border-left-color:var(--info)}
+ .stat.danger {border-left-color:var(--danger)}
+ .stat-value{font-size:1.7rem;font-weight:700;color:var(--text);line-height:1.1}
+ .stat-label{font-size:.74rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-top:.2rem}
+
+ .banner{
+   background:linear-gradient(90deg,var(--primary-light),transparent);
+   border-left:4px solid var(--primary);
+   color:var(--text);padding:12px 16px;border-radius:var(--radius-sm);
+   margin-bottom:1rem;display:flex;align-items:center;gap:10px;
+   font-size:.92rem;font-weight:500;
+ }
+ .banner.warn{background:linear-gradient(90deg,#fef3c7,transparent);border-left-color:var(--warn);color:#92400e}
+ [data-theme='dark'] .banner.warn{color:#fbbf24}
+ .banner.info{background:linear-gradient(90deg,#cffafe,transparent);border-left-color:var(--info);color:#155e75}
+ [data-theme='dark'] .banner.info{color:#67e8f9}
+ .banner.success{background:linear-gradient(90deg,#d1fae5,transparent);border-left-color:var(--accent);color:#065f46}
+ [data-theme='dark'] .banner.success{color:#6ee7b7}
+
+ .card{
+   background:var(--surface);border-radius:var(--radius);
+   padding:1.4rem 1.6rem;margin-bottom:1.4rem;
+   box-shadow:var(--shadow);border:1px solid var(--border);
+ }
+
+ table{border-collapse:collapse;width:100%;font-size:.88rem}
+ th{
+   text-align:left;padding:10px 8px;border-bottom:2px solid var(--border);
+   font-weight:600;font-size:.74rem;color:var(--text-muted);
+   text-transform:uppercase;letter-spacing:.5px;background:var(--surface);
+ }
+ td{padding:11px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+ tbody tr{transition:background .12s}
+ tbody tr:nth-child(even){background:var(--surface-alt)}
+ tbody tr:hover{background:var(--primary-light)}
+
+ a{color:var(--primary);text-decoration:none;font-weight:500}
+ a:hover{text-decoration:underline}
+
+ button{
+   padding:8px 16px;border-radius:var(--radius-sm);border:1px solid var(--border);
+   background:var(--surface);color:var(--text);cursor:pointer;
+   font-family:inherit;font-weight:500;font-size:.88rem;transition:all .15s;
+ }
+ button:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
+ button.primary{background:var(--primary);color:#fff;border-color:var(--primary);
+                box-shadow:0 4px 12px rgba(79,70,229,.25)}
+ button.primary:hover{background:var(--primary-hover);color:#fff;transform:translateY(-1px)}
+
+ input[type=text],input[type=number],input[type=file],input:not([type]),select,textarea{
+   padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);
+   background:var(--surface);color:var(--text);font-family:inherit;font-size:.9rem;
+   transition:border-color .15s, box-shadow .15s;
+ }
+ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.15)}
+
+ details summary{user-select:none}
+ .pill{display:inline-block;background:var(--primary-light);color:var(--primary);
+       border-radius:999px;padding:3px 11px;margin:2px 4px 2px 0;font-size:.78rem;font-weight:500}
+
+ .empty-state{text-align:center;padding:3rem 1.5rem;color:var(--text-muted)}
+ .empty-state-icon{font-size:3rem;margin-bottom:.8rem;opacity:.55}
+ .empty-state-title{font-size:1.05rem;font-weight:600;margin-bottom:.3rem;color:var(--text)}
+
+ @media (max-width:720px){
+   body{padding:1rem}
+   .stats{grid-template-columns:repeat(2,1fr)}
+   .hero{padding:1.2rem;flex-direction:column;align-items:flex-start}
+   .hero h1{font-size:1.4rem}
+   table{font-size:.8rem}
+   th,td{padding:8px 4px}
+   .card{padding:1rem 1.1rem}
+ }
 </style>
 """
-
-
-def _pw_buttons_html() -> str:
-    """Visible-Playwright buttons. Hidden on Vercel (no display, no subprocess)."""
-    if IS_VERCEL:
-        return ("<br><span class='muted'>Hosted on Vercel — visible-Chromium scraping "
-                "is desktop-only. Run the local launcher to use the 108-site visible walk.</span>")
-    return (
-        '&nbsp; <form method="post" action="/ui/enrich" style="display:inline">'
-        '<button title="Open each top job\'s page in a headless browser and grab the full description">'
-        'Get full descriptions (Playwright)</button></form>'
-        '&nbsp; <form method="post" action="/ui/hn" style="display:inline">'
-        '<button title="Open a visible Chromium, navigate to HN \'Who is hiring\', scrape every job post, score them">'
-        'Scrape HN Who is Hiring (Playwright, visible)</button></form>'
-        '&nbsp; <form method="post" action="/ui/naukri" style="display:inline">'
-        '<button title="Open a visible Chromium, scrape Naukri\'s public listings for your résumé\'s keywords, score them">'
-        'Scrape Naukri (Playwright, visible)</button></form>'
-        '&nbsp; <form method="post" action="/ui/multi" style="display:inline">'
-        '<button title="Walk one Chromium through 108 platforms — visibly. Honest per-site report.">'
-        'Scrape ALL sites (visible)</button></form>'
-    )
+_CSS = _HEAD  # alias kept for backward-compat in case anything else imports it
 
 
 def _clear_jobs() -> None:
@@ -106,6 +222,141 @@ def _refresh_for_active() -> None:
     score_pending_keyword()
 
 
+_FILTER_LABELS = {
+    "location": "📍 ", "experience": "🎓 ", "company_size": "🏢 ",
+    "date_posted": "📅 last ", "work_mode": "💻 ", "job_type": "💼 ",
+    "min_salary": "💰 ≥", "min_equity": "📈 ≥", "joining_date": "🚪 ",
+    "notice_period": "⏳ ", "employee_count": "👥 ", "company_stage": "🌱 ",
+    "industry": "🏷 ", "required_skills": "🛠 ", "visa_sponsorship": "🛂 visa sponsored",
+    "jobs_for_women": "👩 women-only", "sort_by": "↕ sort: ",
+}
+_FILTER_SUFFIX = {"date_posted": " days", "min_salary": " LPA", "min_equity": "%",
+                  "notice_period": " days"}
+
+
+def _filter_pills_html() -> str:
+    """Compact chips showing each active filter — visible on the home page."""
+    pills = []
+    for key, val in _LAST_FILTERS.items():
+        if not val or val == "score":  # "score" is the default sort, skip showing
+            continue
+        if key in ("visa_sponsorship", "jobs_for_women"):
+            txt = _FILTER_LABELS[key]
+        else:
+            prefix = _FILTER_LABELS.get(key, f"{key}: ")
+            suffix = _FILTER_SUFFIX.get(key, "")
+            txt = f"{prefix}{val}{suffix}"
+        pills.append(f"<span class='pill'>{html.escape(txt)}</span>")
+    if not pills:
+        return ""
+    return ("<div style='margin:.4rem 0 1rem'><b style='font-size:.78rem;"
+            "color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px'>"
+            "Active filters</b><br>" + "".join(pills) + "</div>")
+
+
+def _greeting() -> str:
+    """Time-of-day-aware greeting."""
+    h = datetime.now().hour
+    if h < 12: return "Good morning"
+    if h < 18: return "Good afternoon"
+    return "Good evening"
+
+
+def _stat_card(value: int, label: str, kind: str = "primary") -> str:
+    return (f"<div class='stat {kind}'>"
+            f"<div class='stat-value'>{value}</div>"
+            f"<div class='stat-label'>{label}</div></div>")
+
+
+def _stats_strip(jobs: list[dict], active_count: int) -> str:
+    """5 metric cards across the top: Matches / Saved / Applied / Interviewing / Offers."""
+    by_status = {"saved": 0, "applied": 0, "interviewing": 0, "offer": 0, "rejected": 0}
+    for j in jobs:
+        st = j.get("status") or "scored"
+        if st in by_status:
+            by_status[st] += 1
+    return ("<div class='stats'>"
+            + _stat_card(active_count, "💼 Matches", "primary")
+            + _stat_card(by_status["saved"], "⭐ Saved", "info")
+            + _stat_card(by_status["applied"], "✅ Applied", "success")
+            + _stat_card(by_status["interviewing"], "📞 Interviewing", "warn")
+            + _stat_card(by_status["offer"], "🎉 Offers", "success")
+            + "</div>")
+
+
+def _smart_banner_html(active: dict | None, jobs: list[dict], active_count: int) -> str:
+    """One context-aware banner that nudges the user toward the next useful action."""
+    if not active:
+        return ("<div class='banner info'>👋 <span><b>Welcome!</b> Upload your résumé "
+                "below to scan 108 platforms and find matching roles.</span></div>")
+    if active_count == 0:
+        return ("<div class='banner info'>📭 <span>No matches yet — click "
+                "<b>Upload résumé + Search jobs</b> to start the 108-site walk.</span></div>")
+    strong = sum(1 for j in jobs if (j.get("score") or 0) >= 70)
+    if strong > 0:
+        return (f"<div class='banner success'>🎯 <span>You have <b>{strong} strong match"
+                f"{'es' if strong != 1 else ''}</b> (score ≥ 70) — review them at the top.</span></div>")
+    unset = sum(1 for j in jobs if (j.get("status") or "scored") == "scored")
+    if unset > 5:
+        return (f"<div class='banner warn'>⚡ <span><b>{unset} jobs</b> need your review — "
+                f"use the Status dropdown to track which ones you've saved or applied to.</span></div>")
+    applied = sum(1 for j in jobs if (j.get("status") or "") == "applied")
+    if applied > 0 and not any((j.get("status") or "") == "interviewing" for j in jobs):
+        return (f"<div class='banner info'>📬 <span><b>{applied} application"
+                f"{'s' if applied != 1 else ''} sent</b> — follow up on any that haven't responded yet.</span></div>")
+    return ""
+
+
+def _extract_salary_lpa(job: dict) -> float | None:
+    """Best-effort: pull an annual salary in LPA from title/description/raw."""
+    blob = " ".join(str(x or "") for x in (job.get("title"), job.get("description"),
+                                            (job.get("raw") or {}).get("salary")))
+    if not blob:
+        return None
+    import re as _re
+    # "12 LPA", "₹15,00,000", "$120,000", "Rs 8 lakh", "8-12 LPA"
+    m = _re.search(r"(\d{1,3}(?:[.,]\d{1,2})?)\s*[-–to]+\s*(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:LPA|lpa|lakh)", blob)
+    if m:
+        try: return float(m.group(1).replace(",", ""))
+        except ValueError: pass
+    m = _re.search(r"(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:LPA|lpa|lakh)", blob)
+    if m:
+        try: return float(m.group(1).replace(",", ""))
+        except ValueError: pass
+    return None
+
+
+def _apply_display_filters(jobs: list[dict]) -> list[dict]:
+    """Apply post-scrape display filters (min salary, required skills) and sort."""
+    f = _LAST_FILTERS
+    out = list(jobs)
+
+    if f.get("min_salary"):
+        try:
+            floor = float(f["min_salary"])
+            out = [j for j in out if (s := _extract_salary_lpa(j)) is None or s >= floor]
+        except ValueError:
+            pass
+
+    req = (f.get("required_skills") or "").lower()
+    if req:
+        wanted = [w.strip() for w in req.split(",") if w.strip()]
+        def has_all(j: dict) -> bool:
+            blob = " ".join(str(x or "") for x in (j.get("title"), j.get("description"),
+                                                    j.get("score_reason"))).lower()
+            return all(w in blob for w in wanted)
+        out = [j for j in out if has_all(j)]
+
+    sort_by = f.get("sort_by") or "score"
+    if sort_by == "recent":
+        out.sort(key=lambda j: (j.get("raw") or {}).get("created") or "", reverse=True)
+    elif sort_by == "title":
+        out.sort(key=lambda j: (j.get("title") or "").lower())
+    # default "score" is already applied by the Supabase query
+
+    return out
+
+
 def _is_expired(job: dict) -> bool:
     created = (job.get("raw") or {}).get("created")
     if not created:
@@ -120,15 +371,66 @@ def _is_expired(job: dict) -> bool:
     return dt < datetime.now(timezone.utc) - timedelta(days=_EXPIRE_DAYS)
 
 
+_STATUS_OPTIONS = [
+    ("scored", "— set —"),
+    ("saved", "⭐ Saved"),
+    ("applied", "✅ Applied"),
+    ("interviewing", "📞 Interviewing"),
+    ("offer", "🎉 Offer"),
+    ("rejected", "❌ Rejected"),
+]
+
+
+_LIMIT_OPTIONS = [("30", "Top 30"), ("70", "Top 70"), ("all", "All matches")]
+
+
+def _limit_dropdown(current: str) -> str:
+    """The 'Show: Top 30 / Top 70 / All' selector. Pure client-side — toggles row
+    visibility via JS, no URL params, no page reload. Choice persists in localStorage.
+    """
+    opts = ""
+    for val, label in _LIMIT_OPTIONS:
+        opts += f"<option value='{val}'>{html.escape(label)}</option>"
+    return (f"<label style='font-size:.85rem;color:var(--text-muted);margin-left:.6rem;font-weight:500'>"
+            f"Show: <select id='showLimit' onchange='applyShowLimit()' "
+            f"style='padding:3px 8px;font-size:.85rem;border:1px solid var(--border);"
+            f"border-radius:6px;background:var(--surface);color:var(--text)'>{opts}</select></label>")
+
+
+def _score_badge(score) -> str:
+    """Color-coded pill: green ≥70, yellow 40-69, red <40."""
+    if score is None:
+        return "<span style='color:#888'>-</span>"
+    s = int(score)
+    if s >= 70:    bg = "#0a7d28"
+    elif s >= 40:  bg = "#c69500"
+    else:          bg = "#bb2222"
+    return (f"<span style='background:{bg};color:#fff;padding:2px 10px;"
+            f"border-radius:999px;font-weight:700;font-size:.85rem'>{s}</span>")
+
+
+def _status_dropdown(job_id: str, current: str | None) -> str:
+    opts = ""
+    cur = current or "scored"
+    for val, label in _STATUS_OPTIONS:
+        sel = " selected" if val == cur else ""
+        opts += f"<option value='{html.escape(val)}'{sel}>{html.escape(label)}</option>"
+    return (f"<form method='post' action='/ui/status' style='display:inline;margin:0'>"
+            f"<input type='hidden' name='job_id' value='{html.escape(str(job_id))}'>"
+            f"<select name='status' onchange='this.form.submit()' "
+            f"style='padding:2px 4px;font-size:.82rem;border:1px solid #ccc;border-radius:4px'>{opts}</select>"
+            f"</form>")
+
+
 def _job_rows(jobs: list[dict]) -> str:
     rows = ""
     for i, j in enumerate(jobs, start=1):
-        sc = j.get("score")
         url = j.get("url") or ""
         title = str(j.get("title") or "")
         desc_short = (j.get("description") or "")[:240]
         raw = j.get("raw") or {}
         posted = (raw.get("created") or "")[:10] if raw.get("created") else (raw.get("posted_text") or "-")
+        source = j.get("source") or raw.get("site") or ""
         title_html = (
             f"<a href='{html.escape(url)}' target='_blank' rel='noopener' "
             f"title='{html.escape(desc_short)}'>{html.escape(title)}</a>"
@@ -138,21 +440,35 @@ def _job_rows(jobs: list[dict]) -> str:
             f"<a href='{html.escape(url)}' target='_blank' rel='noopener'>Apply &rarr;</a>"
             if url else ""
         )
+        source_html = (
+            f"<span style='background:#eef;color:#334;padding:1px 7px;border-radius:4px;"
+            f"font-size:.78rem'>{html.escape(source)}</span>" if source else ""
+        )
         rows += (f"<tr><td>{i}</td>"
-                 f"<td class='score'>{sc if sc is not None else '-'}</td>"
+                 f"<td>{_score_badge(j.get('score'))}</td>"
                  f"<td>{title_html}</td>"
                  f"<td>{html.escape(str(j.get('company') or ''))}</td>"
                  f"<td>{html.escape(str(j.get('location') or ''))}</td>"
                  f"<td>{html.escape(str(posted))}</td>"
-                 f"<td class='muted'>{html.escape(str(j.get('score_reason') or ''))}</td>"
+                 f"<td>{source_html}</td>"
+                 f"<td>{_status_dropdown(j.get('id'), j.get('status'))}</td>"
                  f"<td>{apply_html}</td></tr>")
-    return rows or "<tr><td colspan='8' class='muted'>Empty — upload a résumé and the search will fill this in.</td></tr>"
+    if rows:
+        return rows
+    return ("<tr><td colspan='9'><div class='empty-state'>"
+            "<div class='empty-state-icon'>📭</div>"
+            "<div class='empty-state-title'>No jobs here yet</div>"
+            "<div class='muted'>Upload your résumé and click the search button — "
+            "the 108-site walk will fill this in.</div></div></td></tr>")
 
 
 def _page() -> str:
+    """Renders the full page. The 'Show:' dropdown is purely client-side now —
+    all rows go into the HTML and JS toggles visibility based on the user's choice.
+    """
     profiles = list_profiles()
     active = get_active()
-    querystr = ", ".join(derive_queries(active)) if active else ""
+    HARD_CAP = 200  # never render more than this server-side
 
     prof_rows = ""
     for p in profiles:
@@ -166,25 +482,60 @@ def _page() -> str:
     if not prof_rows:
         prof_rows = "<tr><td colspan='4' class='muted'>No resume uploaded yet.</td></tr>"
 
-    empty = "<tr><td colspan='8' class='muted'>No active resume - upload one above to begin.</td></tr>"
+    empty = ("<tr><td colspan='9'><div class='empty-state'>"
+             "<div class='empty-state-icon'>👋</div>"
+             "<div class='empty-state-title'>Upload a résumé to begin</div>"
+             "<div class='muted'>Drop your PDF/DOCX into the form above — we'll scan 108 platforms for you.</div>"
+             "</div></td></tr>")
     active_html = past_html = empty
+    active_count = past_count = 0
+    active_jobs: list[dict] = []
     if active:
         jobs = (get_supabase().table("jobs")
-                .select("title,company,location,score,score_reason,raw,url,description")
+                .select("id,source,status,title,company,location,score,score_reason,raw,url,description")
                 .gt("score", 15)  # only résumé-matching jobs (drops unscored + no-overlap)
                 .order("score", desc=True).limit(200).execute().data)
-        active_html = _job_rows([j for j in jobs if not _is_expired(j)][:30])
-        past_html = _job_rows([j for j in jobs if _is_expired(j)][:20])
+        jobs = _apply_display_filters(jobs)
+        active_jobs = [j for j in jobs if not _is_expired(j)]
+        past_jobs = [j for j in jobs if _is_expired(j)]
+        active_count, past_count = len(active_jobs), len(past_jobs)
+        active_html = _job_rows(active_jobs[:HARD_CAP])
+        past_html = _job_rows(past_jobs[:HARD_CAP])
 
-    searching = html.escape(querystr) if querystr else "(no active resume)"
-    return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>AI Career Agent</title>{_CSS}</head><body>
-<h1>AI Career Agent</h1>
-<p class="muted">Jobs are matched strictly to your active resume. Free keyword scoring, no API.</p>
-{('<p class="muted" style="background:#fff8d6;border:1px solid #e4cc5e;padding:8px 12px;border-radius:6px"><b>Hosted on Vercel.</b> Uploads search Adzuna + Remotive + RemoteOK APIs (~2 s). For the 108-site visible Chromium walk, run the project locally — clone the repo and double-click <code>start.bat</code>.</p>' if IS_VERCEL else '')}
+    # Hero / stats / smart banner — only rendered once per page load
+    greeting = _greeting()
+    profile_name = html.escape(str((active or {}).get("label") or "there").split(".")[0])
+    if active:
+        subtitle = (f"{greeting}, {profile_name} &middot; Matching your résumé across "
+                    f"<b>108 platforms</b> &middot; <b>{active_count}</b> live matches found")
+    else:
+        subtitle = f"{greeting} &middot; Upload a résumé to scan 108 job platforms"
+    stats_strip = _stats_strip(active_jobs, active_count) if active else ""
+    smart_banner = _smart_banner_html(active, active_jobs, active_count)
+    vercel_banner = ('<div class="banner warn">☁️ <span><b>Hosted on Vercel.</b> '
+                     'Uploads search Adzuna + Remotive + RemoteOK APIs (~2 s). For '
+                     'the 108-site visible Chromium walk, run the project locally '
+                     'and double-click <code>start.bat</code>.</span></div>'
+                     if IS_VERCEL else '')
+
+    return f"""<!doctype html><html lang="en" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Career Agent</title>{_HEAD}</head><body>
+
+<header class="hero">
+  <div>
+    <div class="hero-title"><span style="font-size:1.9rem">🎯</span><h1>AI Career Agent</h1></div>
+    <p class="hero-subtitle">{subtitle}</p>
+  </div>
+  <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
+</header>
+
+{stats_strip}
+{smart_banner}
+{vercel_banner}
 
 <div class="card">
-  <h3>1. Your resumes</h3>
+  <h3>📄 Your résumé</h3>
   <form method="post" action="/ui/upload" enctype="multipart/form-data">
     <input type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required>
     &nbsp;
@@ -204,40 +555,255 @@ def _page() -> str:
       <option value="mnc">MNC</option>
     </select>
     &nbsp;
-    <button>Upload resume + Search jobs (visible)</button>
+    <select name="scrape_limit" id="scrape_limit" onchange="updateEstimate()" style="padding:5px" title="How many jobs to collect before stopping the scrape.">
+      <option value="30">Search Top 30</option>
+      <option value="70">Search Top 70</option>
+      <option value="all">Search All matches</option>
+    </select>
+    &nbsp;
+    <span id="time-est" class="muted" style="font-size:.85rem"></span>
+    <br><br>
+    <button class="primary" type="submit">🚀 Upload résumé + Search jobs</button>
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;color:#1d6ef0;font-weight:600">+ Advanced filters (date posted / job type / work mode / salary / skills / company stage / sort / …)</summary>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;padding:10px;background:#fafafa;border-radius:6px">
+        <label>Date posted
+          <select name="date_posted" style="width:100%;padding:5px">
+            <option value="">Any time</option>
+            <option value="1">Last 24 hours</option>
+            <option value="3">Last 3 days</option>
+            <option value="7">Last week</option>
+            <option value="30">Last month</option>
+          </select>
+        </label>
+        <label>Work mode
+          <select name="work_mode" style="width:100%;padding:5px">
+            <option value="">Any work mode</option>
+            <option value="onsite">On-site</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="remote">Remote</option>
+          </select>
+        </label>
+        <label>Job type
+          <select name="job_type" style="width:100%;padding:5px">
+            <option value="">Any job type</option>
+            <option value="fulltime">Full-time</option>
+            <option value="parttime">Part-time</option>
+            <option value="contract">Contract</option>
+            <option value="temporary">Temporary</option>
+            <option value="internship">Internship</option>
+            <option value="freelance">Freelance</option>
+          </select>
+        </label>
+        <label>Min salary (LPA)
+          <input name="min_salary" type="number" min="0" step="1" style="width:100%;padding:5px" placeholder="e.g. 8">
+        </label>
+        <label>Min equity (%)
+          <input name="min_equity" type="number" min="0" max="100" step="0.1" style="width:100%;padding:5px" placeholder="e.g. 0.25">
+        </label>
+        <label>Joining date
+          <select name="joining_date" style="width:100%;padding:5px">
+            <option value="">Any</option>
+            <option value="immediate">Immediately</option>
+            <option value="within_1_month">Within 1 month</option>
+            <option value="flexible">Flexible</option>
+          </select>
+        </label>
+        <label>Notice period
+          <select name="notice_period" style="width:100%;padding:5px">
+            <option value="">Any</option>
+            <option value="15">15 days</option>
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </label>
+        <label>Employee count
+          <select name="employee_count" style="width:100%;padding:5px">
+            <option value="">Any</option>
+            <option value="1-10">1–10</option>
+            <option value="11-50">11–50</option>
+            <option value="51-200">51–200</option>
+            <option value="201-500">201–500</option>
+            <option value="501-1000">501–1,000</option>
+            <option value="1001-5000">1,001–5,000</option>
+            <option value="5000+">5,000+</option>
+          </select>
+        </label>
+        <label>Company stage
+          <select name="company_stage" style="width:100%;padding:5px">
+            <option value="">Any</option>
+            <option value="seed">Seed</option>
+            <option value="series-a">Series A</option>
+            <option value="series-b">Series B</option>
+            <option value="series-c">Series C+</option>
+            <option value="public">Public</option>
+          </select>
+        </label>
+        <label>Industry
+          <input name="industry" style="width:100%;padding:5px" placeholder="e.g. FinTech, HealthTech, SaaS">
+        </label>
+        <label style="grid-column:span 3">Required skills (comma-separated)
+          <input name="required_skills" style="width:100%;padding:5px" placeholder="e.g. python, aws, react, kubernetes">
+        </label>
+        <label style="grid-column:span 3">Company priority order <span class="muted" style="font-weight:400">(overrides "Company size" above &mdash; 1st-preference career pages are scraped first, then 2nd, then 3rd)</span>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+            <span style="font-size:.85rem;min-width:36px">1st:</span>
+            <select name="priority_1" style="flex:1;padding:5px">
+              <option value="">— none —</option>
+              <option value="startup">Startup / Unicorn (1–500 employees)</option>
+              <option value="midlevel">Mid-level / IT services (500–50,000)</option>
+              <option value="mnc">MNC (50,000+)</option>
+            </select>
+            <span style="font-size:.85rem;min-width:36px">2nd:</span>
+            <select name="priority_2" style="flex:1;padding:5px">
+              <option value="">— none —</option>
+              <option value="startup">Startup / Unicorn</option>
+              <option value="midlevel">Mid-level / IT services</option>
+              <option value="mnc">MNC</option>
+            </select>
+            <span style="font-size:.85rem;min-width:36px">3rd:</span>
+            <select name="priority_3" style="flex:1;padding:5px">
+              <option value="">— none —</option>
+              <option value="startup">Startup / Unicorn</option>
+              <option value="midlevel">Mid-level / IT services</option>
+              <option value="mnc">MNC</option>
+            </select>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" name="visa_sponsorship" value="1"> Visa sponsorship required
+        </label>
+        <label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" name="jobs_for_women" value="1"> Jobs for women
+        </label>
+        <label>Sort by
+          <select name="sort_by" style="width:100%;padding:5px">
+            <option value="score">Match score (default)</option>
+            <option value="recent">Most recent</option>
+            <option value="title">Title A → Z</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted" style="margin-top:6px;font-size:.8rem">Date posted, Work mode, Job type and Experience are injected into Naukri / LinkedIn / Indeed URLs where each site supports the parameter. Other filters are captured and applied to the displayed result list.</p>
+    </details>
   </form>
   <p class="muted">Uploading opens visible Chromium windows that walk <b>up to ~108 platforms</b>: 15 job boards (Naukri, LinkedIn, Indeed, Foundit, Shine, Glassdoor, Apna, Internshala, JobsForHer, WorkIndia, Hirist, Cutshort, Instahyre, TimesJobs, Wellfound) + 46 Indian startups/unicorns (Razorpay, Zomato, PhonePe, Cred, Meesho, BYJU's, Unacademy, Dream11, MakeMyTrip, Nykaa, BharatPe, Urban Company, Lenskart, OYO, Acko, Practo, PharmEasy, etc.) + 15 IT services (TCS, Infosys, Wipro, HCL, Tech Mahindra, Cognizant, Capgemini, LTIMindtree, etc.) + 32 MNCs (Google, Microsoft, Amazon, Meta, Apple, Oracle, Salesforce, SAP, Cisco, Intel, Adobe, IBM, Nvidia, Atlassian, ServiceNow, Snowflake, Databricks, Uber, Netflix, JPMorgan, Goldman, Citi, Deloitte, Accenture, etc.). <b>Location</b> is injected into the URL of every site that supports it. <b>Company size</b> picks which career pages are scraped — Startup (~61 sites), Mid-level (~30 sites), MNC (~47 sites), or blank for all ~108. Boards always run.</p>
   <table><thead><tr><th>Resume</th><th>Keywords</th><th>Active</th><th></th></tr></thead>
   <tbody>{prof_rows}</tbody></table>
-  <p class="muted">Searching jobs for: <b>{searching}</b>
-     &nbsp; <form method="post" action="/ui/discover" style="display:inline"><button>Refresh matches</button></form>
-     {_pw_buttons_html()}</p>
 </div>
 
 <div class="card">
-  <h3>2. Active jobs (live postings)</h3>
-  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Why</th><th></th></tr></thead>
+  <h3><span>💼 Active jobs <span style="color:var(--primary);font-weight:600;font-size:.9rem">— {active_count} match{('' if active_count == 1 else 'es')}</span></span>{_limit_dropdown('30')}</h3>
+  {_filter_pills_html()}
+  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
   <tbody>{active_html}</tbody></table>
 </div>
 
 <div class="card">
-  <h3>3. Add a job from any site (Wellfound, LinkedIn, Naukri, etc.)</h3>
-  <p class="muted">Browse those sites in your <b>normal</b> browser, copy a job's URL, paste it here. Strongly recommended: also paste the description text — that's what scoring matches against.</p>
-  <form method="post" action="/ui/add_job">
-    <input name="url" placeholder="https://wellfound.com/jobs/... or any job URL" required style="width:55%;padding:5px">
-    &nbsp;<input name="title" placeholder="Job title (optional)" style="width:35%;padding:5px">
-    <br><br>
-    <textarea name="description" placeholder="Paste the full job description here (optional but recommended)" rows="4" style="width:97%;padding:5px"></textarea>
-    <br><br>
-    <button>Add and score</button>
-  </form>
-</div>
-
-<div class="card">
-  <h3>4. Past / expired jobs (posted &gt; {_EXPIRE_DAYS} days ago)</h3>
-  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Why</th><th></th></tr></thead>
+  <h3>📋 Past / expired jobs <span class="muted">— {past_count} (posted &gt; {_EXPIRE_DAYS} days ago)</span></h3>
+  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
   <tbody>{past_html}</tbody></table>
 </div>
+
+<footer class="muted" style="text-align:center;padding:1rem 0 2rem;font-size:.82rem">
+  Built with FastAPI + Playwright + Supabase &middot; All matches are scored locally against your résumé skills.
+</footer>
+
+<!-- Loading overlay shown while the scrape runs -->
+<div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(11,13,20,.72);
+     backdrop-filter:blur(6px);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);color:var(--text);border-radius:16px;padding:2rem 2.5rem;
+              box-shadow:0 25px 50px rgba(0,0,0,.3);text-align:center;min-width:340px">
+    <div style="font-size:3rem;animation:spin 1.5s linear infinite;display:inline-block">🔍</div>
+    <h3 style="margin:.6rem 0;font-size:1.15rem">Scraping platforms…</h3>
+    <p class="muted" style="margin:.2rem 0;font-size:.88rem">Visible Chromium windows are
+       popping up in sequence — keep them visible.</p>
+    <div style="display:flex;justify-content:center;gap:2rem;margin-top:1.2rem">
+      <div><div style="font-size:.74rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Estimated</div>
+           <div style="font-size:1.3rem;font-weight:700;color:var(--primary)" id="loadEst">~1–3 min</div></div>
+      <div><div style="font-size:.74rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Elapsed</div>
+           <div style="font-size:1.3rem;font-weight:700;color:var(--accent)" id="loadElapsed">0:00</div></div>
+    </div>
+  </div>
+</div>
+
+<style>@keyframes spin{{from{{transform:rotate(0)}}to{{transform:rotate(360deg)}}}}</style>
+
+<script>
+// ----- theme toggle (persisted) -----
+function toggleTheme(){{
+  const cur = document.documentElement.dataset.theme || 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try {{ localStorage.setItem('theme', next); }} catch(e) {{}}
+  document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+}}
+(function(){{
+  let saved = 'light';
+  try {{ saved = localStorage.getItem('theme') || 'light'; }} catch(e) {{}}
+  document.documentElement.dataset.theme = saved;
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+}})();
+
+// ----- 'Show: Top 30/70/All' — pure client-side row hiding, persists in localStorage -----
+function applyShowLimit(){{
+  const sel = document.getElementById('showLimit');
+  if (!sel) return;
+  const v = sel.value;
+  try {{ localStorage.setItem('showLimit', v); }} catch(e) {{}}
+  const cap = v === 'all' ? Infinity : parseInt(v, 10);
+  document.querySelectorAll('table tbody').forEach(tb => {{
+    let shown = 0;
+    tb.querySelectorAll('tr').forEach(tr => {{
+      // Empty-state rows have colspan; skip them.
+      if (tr.querySelector('td[colspan]')) return;
+      if (shown < cap) {{ tr.style.display = ''; shown++; }}
+      else tr.style.display = 'none';
+    }});
+  }});
+}}
+(function(){{
+  let saved = '30';
+  try {{ saved = localStorage.getItem('showLimit') || '30'; }} catch(e) {{}}
+  const sel = document.getElementById('showLimit');
+  if (sel) {{ sel.value = saved; applyShowLimit(); }}
+}})();
+
+// ----- estimated-time hint next to the Search dropdown -----
+const TIME_EST = {{
+  '30':  '⏱ ~1–3 min',
+  '70':  '⏱ ~3–8 min',
+  'all': '⏱ ~10–16 min (full 108-site sweep)'
+}};
+function updateEstimate(){{
+  const sel = document.getElementById('scrape_limit');
+  const out = document.getElementById('time-est');
+  if (sel && out) out.textContent = TIME_EST[sel.value] || '';
+}}
+updateEstimate();  // run once on page load
+
+// ----- loading overlay on form submit -----
+(function(){{
+  const form = document.querySelector('form[action="/ui/upload"]');
+  if (!form) return;
+  form.addEventListener('submit', function(){{
+    const sel = document.getElementById('scrape_limit');
+    const v = sel ? sel.value : '30';
+    document.getElementById('loadEst').textContent = (TIME_EST[v] || '').replace('⏱ ','');
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.style.display = 'flex';
+    const start = Date.now();
+    setInterval(() => {{
+      const sec = Math.floor((Date.now() - start) / 1000);
+      const m = Math.floor(sec / 60), s = (sec % 60).toString().padStart(2,'0');
+      const el = document.getElementById('loadElapsed');
+      if (el) el.textContent = m + ':' + s;
+    }}, 1000);
+  }});
+}})();
+</script>
 </body></html>"""
 
 
@@ -252,6 +818,24 @@ async def ui_upload(
     location: str = Form(""),
     experience: str = Form(""),
     company_size: str = Form(""),
+    date_posted: str = Form(""),
+    work_mode: str = Form(""),
+    job_type: str = Form(""),
+    min_salary: str = Form(""),
+    min_equity: str = Form(""),
+    joining_date: str = Form(""),
+    notice_period: str = Form(""),
+    employee_count: str = Form(""),
+    company_stage: str = Form(""),
+    industry: str = Form(""),
+    required_skills: str = Form(""),
+    visa_sponsorship: str = Form(""),
+    jobs_for_women: str = Form(""),
+    sort_by: str = Form("score"),
+    scrape_limit: str = Form("30"),
+    priority_1: str = Form(""),
+    priority_2: str = Form(""),
+    priority_3: str = Form(""),
 ):
     name = (file.filename or "").lower()
     if not name.endswith(_ALLOWED):
@@ -262,6 +846,18 @@ async def ui_upload(
     upload_profile(file.filename, text)
     # Clean slate: Active jobs starts EMPTY and only fills with the new search's results.
     _clear_jobs()
+    # Stash the active filter snapshot in module state so the home page can show
+    # filter pills AND apply the post-scrape filters (salary / sort / required skills).
+    _LAST_FILTERS.update({
+        "location": location, "experience": experience, "company_size": company_size,
+        "date_posted": date_posted, "work_mode": work_mode, "job_type": job_type,
+        "min_salary": min_salary, "min_equity": min_equity,
+        "joining_date": joining_date, "notice_period": notice_period,
+        "employee_count": employee_count, "company_stage": company_stage,
+        "industry": industry, "required_skills": required_skills,
+        "visa_sponsorship": visa_sponsorship, "jobs_for_women": jobs_for_women,
+        "sort_by": sort_by or "score",
+    })
     if IS_VERCEL:
         # On Vercel: no display, no subprocess, 60-second timeout. Use API-source
         # discovery (Adzuna + Remotive + RemoteOK) which finishes in ~1-3 seconds.
@@ -272,10 +868,23 @@ async def ui_upload(
         except Exception:
             pass
     else:
+        # SCRAPE_LIMIT stops the visible walk once we've collected N jobs.
+        # "all" means no cap.
+        sl = (scrape_limit or "30").strip().lower()
+        scrape_n = "" if sl == "all" else (sl if sl.isdigit() else "30")
         env = {**os.environ,
                "FILTER_LOCATION": (location or "").strip(),
                "FILTER_EXPERIENCE": (experience or "").strip(),
-               "FILTER_COMPANY_SIZE": (company_size or "").strip().lower()}
+               "FILTER_COMPANY_SIZE": (company_size or "").strip().lower(),
+               "FILTER_DATE_POSTED": (date_posted or "").strip(),
+               "FILTER_WORK_MODE": (work_mode or "").strip().lower(),
+               "FILTER_JOB_TYPE": (job_type or "").strip().lower(),
+               "FILTER_JOBS_FOR_WOMEN": "1" if jobs_for_women else "",
+               "FILTER_VISA_SPONSORSHIP": "1" if visa_sponsorship else "",
+               "SCRAPE_LIMIT": scrape_n,
+               "COMPANY_PRIORITY_1": (priority_1 or "").strip().lower(),
+               "COMPANY_PRIORITY_2": (priority_2 or "").strip().lower(),
+               "COMPANY_PRIORITY_3": (priority_3 or "").strip().lower()}
         # VISIBLE Playwright walk across MULTIPLE platforms — one Chromium window per site
         # pops up in sequence (Naukri, LinkedIn, Wellfound, Indeed, Foundit, Razorpay).
         _visible_subprocess(
@@ -307,71 +916,15 @@ def ui_delete(profile_id: str = Form(...)):
     return RedirectResponse("/", status_code=303)
 
 
-@router.post("/ui/discover")
-def ui_discover():
-    _refresh_for_active()
-    return RedirectResponse("/", status_code=303)
+_VALID_STATUSES = {s for s, _ in _STATUS_OPTIONS}
 
 
-@router.post("/ui/enrich")
-def ui_enrich():
-    """Visible Playwright enrichment — opens a Chromium that visits each top job's page."""
-    _visible_subprocess([sys.executable, "-m", "app.enrich"], timeout=300)
-    return RedirectResponse("/", status_code=303)
-
-
-@router.post("/ui/hn")
-def ui_hn():
-    """Visible Playwright scrape of HN 'Who is Hiring'."""
-    _visible_subprocess([sys.executable, "-m", "app.scrape.hn_hiring"], timeout=300)
-    return RedirectResponse("/", status_code=303)
-
-
-@router.post("/ui/naukri")
-def ui_naukri():
-    """Visible Playwright scrape of Naukri's public job listings."""
-    _visible_subprocess([sys.executable, "-m", "app.scrape.naukri"], timeout=300)
-    return RedirectResponse("/", status_code=303)
-
-
-@router.post("/ui/multi")
-def ui_multi():
-    """Visible multi-site Playwright walk: Naukri / LinkedIn / Wellfound / Indeed / Foundit / Razorpay."""
-    _visible_subprocess([sys.executable, "-m", "app.scrape.multi_site"], timeout=420)
-    return RedirectResponse("/", status_code=303)
-
-
-@router.post("/ui/add_job")
-def ui_add_job(
-    url: str = Form(...),
-    title: str = Form(""),
-    description: str = Form(""),
-):
-    """Manually add a job by URL (+ optional title / pasted description).
-
-    Use this for sites that block bots (Wellfound, LinkedIn, Naukri, etc.) — you browse
-    them in your own browser, copy the link + JD text, and the app scores it like any
-    other job. No scraping needed.
-    """
-    url = url.strip()
-    if not url.startswith(("http://", "https://")):
+@router.post("/ui/status")
+def ui_status(job_id: str = Form(...), status: str = Form(...)):
+    """Update a job's status from the per-row dropdown (Saved / Applied / Interviewing / …)."""
+    if status not in _VALID_STATUSES:
         return RedirectResponse("/", status_code=303)
-    row = {
-        "source": "manual",
-        "url": url,
-        "title": (title.strip() or url[:80]),
-        "description": description.strip()[:8000] or None,
-        "status": "discovered",
-    }
-    sb = get_supabase()
-    sb.table("jobs").upsert([row], on_conflict="url").execute()
-    active = get_active()
-    if active:
-        skills = active.get("skills") or []
-        rows = sb.table("jobs").select("*").eq("url", url).limit(1).execute().data
-        if rows:
-            s, reason = keyword_score(skills, rows[0])
-            sb.table("jobs").update(
-                {"score": s, "score_reason": reason, "status": "scored"}
-            ).eq("id", rows[0]["id"]).execute()
+    get_supabase().table("jobs").update({"status": status}).eq("id", job_id).execute()
     return RedirectResponse("/", status_code=303)
+
+

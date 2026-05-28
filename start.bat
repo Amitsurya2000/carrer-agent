@@ -13,7 +13,7 @@ echo   Browser:  http://127.0.0.1:8000
 echo   To stop:  close this window.
 echo ============================================================
 echo.
-".\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --app-dir "C:\Users\Amit\career-agent"
+".\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir "C:\Users\Amit\career-agent\app" --app-dir "C:\Users\Amit\career-agent"
 echo.
 echo Server stopped. Press any key to close.
 pause >nul

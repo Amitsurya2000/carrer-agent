@@ -32,6 +32,64 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 FILTER_LOCATION = os.environ.get("FILTER_LOCATION", "").strip()
 FILTER_COMPANY_SIZE = os.environ.get("FILTER_COMPANY_SIZE", "").strip().lower()
+FILTER_EXPERIENCE = os.environ.get("FILTER_EXPERIENCE", "").strip().lower()
+FILTER_DATE_POSTED = os.environ.get("FILTER_DATE_POSTED", "").strip()  # "1" / "3" / "7" / "30"
+FILTER_WORK_MODE = os.environ.get("FILTER_WORK_MODE", "").strip().lower()  # "onsite" / "hybrid" / "remote"
+FILTER_JOB_TYPE = os.environ.get("FILTER_JOB_TYPE", "").strip().lower()  # "fulltime" / etc.
+# SCRAPE_LIMIT — empty / 0 means no cap (full 108-site sweep). Otherwise stop after N jobs.
+try:
+    SCRAPE_LIMIT = int(os.environ.get("SCRAPE_LIMIT", "").strip() or 0)
+except ValueError:
+    SCRAPE_LIMIT = 0
+
+
+def _inject_advanced_filters(site_name: str, url: str) -> str:
+    """Append per-site URL parameters for date posted / work mode / job type / experience.
+
+    Each major board uses a different param name and value scheme — encoded here once.
+    Sites without URL-level support for a filter silently keep their global feed.
+    """
+    sep = "&" if "?" in url else "?"
+    extra: list[str] = []
+
+    if site_name == "naukri":
+        if FILTER_DATE_POSTED in {"1", "3", "7", "15", "30"}:
+            extra.append(f"jobAge={FILTER_DATE_POSTED}")
+        if FILTER_WORK_MODE == "remote":
+            extra.append("wfhType=2")
+    elif site_name == "linkedin":
+        tpr_map = {"1": "r86400", "3": "r259200", "7": "r604800", "30": "r2592000"}
+        if FILTER_DATE_POSTED in tpr_map:
+            extra.append(f"f_TPR={tpr_map[FILTER_DATE_POSTED]}")
+        wt_map = {"onsite": "1", "remote": "2", "hybrid": "3"}
+        if FILTER_WORK_MODE in wt_map:
+            extra.append(f"f_WT={wt_map[FILTER_WORK_MODE]}")
+        jt_map = {"fulltime": "F", "parttime": "P", "contract": "C",
+                  "temporary": "T", "internship": "I", "freelance": "C"}
+        if FILTER_JOB_TYPE in jt_map:
+            extra.append(f"f_JT={jt_map[FILTER_JOB_TYPE]}")
+        exp_map = {"fresher": "1,2", "mid": "3,4", "senior": "5,6"}
+        if FILTER_EXPERIENCE in exp_map:
+            extra.append(f"f_E={exp_map[FILTER_EXPERIENCE]}")
+    elif site_name == "indeed":
+        if FILTER_DATE_POSTED in {"1", "3", "7", "14"}:
+            extra.append(f"fromage={FILTER_DATE_POSTED}")
+        elif FILTER_DATE_POSTED == "30":
+            extra.append("fromage=14")  # Indeed caps at 14
+        jt_map = {"fulltime": "fulltime", "parttime": "parttime", "contract": "contract",
+                  "internship": "internship", "temporary": "temporary"}
+        if FILTER_JOB_TYPE in jt_map:
+            extra.append(f"jt={jt_map[FILTER_JOB_TYPE]}")
+        if FILTER_WORK_MODE == "remote":
+            extra.append("remotejob=1")
+    elif site_name == "foundit":
+        if FILTER_DATE_POSTED in {"1", "3", "7", "30"}:
+            extra.append(f"freshness={FILTER_DATE_POSTED}")
+    elif site_name == "glassdoor":
+        if FILTER_DATE_POSTED in {"1", "3", "7", "14"}:
+            extra.append(f"fromAge={FILTER_DATE_POSTED}")
+
+    return url + (sep + "&".join(extra) if extra else "")
 
 
 def _slug(q: str) -> str:
@@ -458,11 +516,36 @@ SITES: list[dict] = [
 ]
 
 
+_VALID_CATS = ("startup", "midlevel", "mnc")
+COMPANY_PRIORITY_1 = os.environ.get("COMPANY_PRIORITY_1", "").strip().lower()
+COMPANY_PRIORITY_2 = os.environ.get("COMPANY_PRIORITY_2", "").strip().lower()
+COMPANY_PRIORITY_3 = os.environ.get("COMPANY_PRIORITY_3", "").strip().lower()
+
+
+def _ranked_priorities() -> list[str]:
+    """Return the user's ranked priority list, deduped, only valid categories kept."""
+    out: list[str] = []
+    for p in (COMPANY_PRIORITY_1, COMPANY_PRIORITY_2, COMPANY_PRIORITY_3):
+        if p in _VALID_CATS and p not in out:
+            out.append(p)
+    return out
+
+
 def _select_sites() -> list[dict]:
-    """Filter SITES by FILTER_COMPANY_SIZE. Job boards always run (they cover everyone)."""
-    if not FILTER_COMPANY_SIZE or FILTER_COMPANY_SIZE not in ("startup", "midlevel", "mnc"):
-        return SITES
-    return [s for s in SITES if s["category"] in ("board", FILTER_COMPANY_SIZE)]
+    """Order matters: when ranked priorities are set, return the matching sites
+    in priority order (1st-preference category first), then boards at the end.
+    Falls back to the single-pick FILTER_COMPANY_SIZE if no priorities are set.
+    """
+    priorities = _ranked_priorities()
+    if priorities:
+        selected: list[dict] = []
+        for cat in priorities:
+            selected.extend(s for s in SITES if s["category"] == cat)
+        selected.extend(s for s in SITES if s["category"] == "board")
+        return selected
+    if FILTER_COMPANY_SIZE in _VALID_CATS:
+        return [s for s in SITES if s["category"] in ("board", FILTER_COMPANY_SIZE)]
+    return SITES
 
 
 def run() -> dict:
@@ -473,9 +556,14 @@ def run() -> dict:
     qs = derive_queries(active)
     q = qs[0] if qs else "data scientist"
     selected = _select_sites()
+    priorities = _ranked_priorities()
     print(f"Query:    {q!r}")
     print(f"Location: {FILTER_LOCATION or 'India (default)'}")
-    print(f"Company:  {FILTER_COMPANY_SIZE or 'any'}")
+    if priorities:
+        print(f"Priority: " + " > ".join(priorities) + "  (then boards)")
+    else:
+        print(f"Company:  {FILTER_COMPANY_SIZE or 'any'}")
+    print(f"Cap:      {SCRAPE_LIMIT or 'no cap (full sweep)'}")
     print(f"Sites:    {len(selected)} of {len(SITES)}\n")
     skills = active.get("skills") or []
 
@@ -483,7 +571,7 @@ def run() -> dict:
     aggregated: list[dict] = []
 
     for i, site in enumerate(selected, start=1):
-        url = site["build_url"](q, FILTER_LOCATION)
+        url = _inject_advanced_filters(site["name"], site["build_url"](q, FILTER_LOCATION))
         print("=" * 60)
         print(f"  [{i}/{len(selected)}]  {site['name'].upper()}  ({site['category']})")
         print(f"  URL: {url}")
@@ -547,6 +635,12 @@ def run() -> dict:
             try: browser.close()
             except Exception: pass
         time.sleep(0.7)
+
+        # Early-stop: once we've collected at least SCRAPE_LIMIT unique URLs, end the walk.
+        # Dedupe is the same as the final pass below so the count is honest.
+        if SCRAPE_LIMIT and len({r["url"] for r in aggregated}) >= SCRAPE_LIMIT:
+            print(f"\n  >>> Cap of {SCRAPE_LIMIT} jobs reached after site {i}. Stopping the walk.\n")
+            break
 
     by_url = {r["url"]: r for r in aggregated}
     rows = list(by_url.values())
