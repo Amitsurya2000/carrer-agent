@@ -26,6 +26,12 @@ SHOTS.mkdir(exist_ok=True)
 
 HN = "https://news.ycombinator.com"
 
+# HEADLESS_BROWSER=1 is set by Dockerfile (Render / Railway / Fly), so the cloud
+# build runs headless with container-safe flags. Local runs stay visible.
+HEADLESS = os.environ.get("HEADLESS_BROWSER", "").strip() == "1"
+_LAUNCH_ARGS = (["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+                if HEADLESS else ["--start-maximized"])
+
 # Filters can be passed by the web app via env vars (set in the subprocess call).
 FILTER_LOCATION = os.environ.get("FILTER_LOCATION", "").strip()
 FILTER_EXPERIENCE = os.environ.get("FILTER_EXPERIENCE", "").strip().lower()
@@ -161,7 +167,7 @@ def run() -> dict:
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
             user_data_dir=str(USER_DATA),
-            headless=False, args=["--start-maximized"], no_viewport=True,
+            headless=HEADLESS, args=_LAUNCH_ARGS, no_viewport=True,
         )
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
 

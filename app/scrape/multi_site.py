@@ -30,6 +30,13 @@ SHOTS.mkdir(exist_ok=True)
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
+# HEADLESS_BROWSER=1 is set by Dockerfile (Render / Railway / Fly), so cloud
+# runs are automatically headless with container-safe Chromium flags. Local
+# runs keep the visible window with --start-maximized.
+HEADLESS = os.environ.get("HEADLESS_BROWSER", "").strip() == "1"
+_LAUNCH_ARGS = (["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+                if HEADLESS else ["--start-maximized"])
+
 FILTER_LOCATION = os.environ.get("FILTER_LOCATION", "").strip()
 FILTER_COMPANY_SIZE = os.environ.get("FILTER_COMPANY_SIZE", "").strip().lower()
 FILTER_EXPERIENCE = os.environ.get("FILTER_EXPERIENCE", "").strip().lower()
@@ -579,7 +586,7 @@ def run() -> dict:
         print("=" * 60)
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False, args=["--start-maximized"])
+            browser = p.chromium.launch(headless=HEADLESS, args=_LAUNCH_ARGS)
             ctx = browser.new_context(user_agent=UA, no_viewport=True)
             page = ctx.new_page()
 

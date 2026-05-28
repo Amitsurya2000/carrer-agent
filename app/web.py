@@ -887,13 +887,15 @@ async def ui_upload(
                "COMPANY_PRIORITY_3": (priority_3 or "").strip().lower()}
         # VISIBLE Playwright walk across MULTIPLE platforms — one Chromium window per site
         # pops up in sequence (Naukri, LinkedIn, Wellfound, Indeed, Foundit, Razorpay).
+        # Timeouts cover the worst case: "Search All matches" can run ~16 min
+        # for the full 108-site sweep on a slow connection.
         _visible_subprocess(
             [sys.executable, "-m", "app.scrape.multi_site"],
-            env=env, timeout=420,
+            env=env, timeout=1200,
         )
         _visible_subprocess(
             [sys.executable, "-m", "app.scrape.hn_hiring"],
-            env=env, timeout=300,
+            env=env, timeout=600,
         )
         try:
             score_pending_keyword()
