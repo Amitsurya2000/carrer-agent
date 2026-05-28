@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+supabase
+pydantic-settings
+anthropic
+httpx
+python-multipart
+pypdf
+python-docx

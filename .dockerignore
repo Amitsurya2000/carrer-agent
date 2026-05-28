@@ -1,0 +1,17 @@
+# Keep the build context small and secrets/local-only files out of the image.
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+.env.template
+.browser/
+profile.json
+profile.example.json
+apply_profile.json
+apply_profile.example.json
+*.md
+node_modules/
+.next/
+frontend/

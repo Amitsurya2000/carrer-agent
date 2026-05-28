@@ -1,0 +1,30 @@
+# Local-only artifacts — never ship these to Vercel.
+.venv/
+.browser_*/
+shots/
+server.log
+__pycache__/
+*.pyc
+
+# Local launchers (Windows desktop / startup) — irrelevant on Vercel.
+*.bat
+*.vbs
+_server.cmd
+start.bat
+start_hidden.vbs
+search_jobs.bat
+
+# Playwright-only requirements file. Vercel uses requirements.txt only.
+requirements-apply.txt
+
+# Render scaffolding — unrelated to Vercel.
+render.yaml
+Dockerfile
+.dockerignore
+
+# Local env (Vercel uses dashboard env vars).
+.env
+
+# Misc working files.
+*_fix.py
+_field_test*.py

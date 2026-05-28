@@ -1,0 +1,18 @@
+{
+  "full_name": "Your Name",
+  "email": "you@example.com",
+  "phone": "+91 90000 00000",
+  "location": "Bengaluru, India",
+  "linkedin_url": "https://www.linkedin.com/in/yourhandle",
+  "github_url": "https://github.com/yourhandle",
+  "portfolio_url": "",
+  "resume_path": "C:/Users/Amit/career-agent/resume.pdf",
+  "cover_letter": "",
+  "answers": {
+    "years of experience": "3",
+    "notice period": "30 days",
+    "expected salary": "",
+    "authorized to work": "Yes",
+    "why": "Edit this per role -- or let Phase 3 draft a tailored answer."
+  }
+}

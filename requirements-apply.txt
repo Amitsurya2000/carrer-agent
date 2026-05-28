@@ -1,0 +1,5 @@
+# Local-only dependency for the attended apply tool (app/apply/filler.py).
+# NOT part of the server / Docker image. After installing, fetch the browser:
+#   pip install -r requirements-apply.txt
+#   python -m playwright install chromium
+playwright

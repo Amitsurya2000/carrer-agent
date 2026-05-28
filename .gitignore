@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+chroma/
+node_modules/
+.next/
+apply_profile.json
+profile.json
+.browser/
+.browser_*/
+shots/
+server.log
+server.out
+server.err

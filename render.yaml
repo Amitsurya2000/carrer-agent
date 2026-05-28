@@ -1,0 +1,21 @@
+# Render Blueprint for the AI Career Agent backend (Phase 7).
+# Use: push this repo to GitHub, then Render -> New -> Blueprint -> select the repo.
+# Set each secret in the Render dashboard when prompted (sync:false keeps them out of git).
+services:
+  - type: web
+    name: career-agent-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
