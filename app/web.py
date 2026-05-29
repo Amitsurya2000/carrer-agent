@@ -95,12 +95,19 @@ _HEAD = """
    --shadow-lg:0 12px 28px rgba(0,0,0,.6);
  }
  *{box-sizing:border-box}
- html, body { position: relative; overflow-x: hidden; }
+ html{
+   position:relative;overflow-x:hidden;
+   background:var(--bg);            /* base color lives on <html> ... */
+   min-height:100%;
+   transition:background .2s;
+ }
  body{
+   position:relative;overflow-x:hidden;
    font-family:'Inter',system-ui,-apple-system,Segoe UI,sans-serif;
-   background:var(--bg);color:var(--text);
+   background:transparent;          /* ... so the z-index:-1 decorations show through <body> */
+   color:var(--text);
    max-width:1180px;margin:0 auto;padding:1.5rem;line-height:1.55;
-   -webkit-font-smoothing:antialiased;transition:background .2s,color .2s;
+   -webkit-font-smoothing:antialiased;transition:color .2s;
  }
 
  /* ----- Floating gradient blobs in the background (Stripe / Linear style) ----- */
