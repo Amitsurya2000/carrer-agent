@@ -1116,12 +1116,12 @@ _SKILL_VOCAB_SHORT = [
 ]
 
 
-def _hr_panel_html(company: str, verified: list[str], guessed: list[str],
+def _hr_panel_html(company: str, verified: list[str],
                    source: str, url: str) -> str:
-    """A compact 'HR & Apply' expander attached to each job row. Reveals every
-    contact option for the company: real emails (if any), 7 pattern guesses,
-    3 search-engine deep links, the apply method classification, and a one-line
-    candidate tip block.
+    """Per-row expander that ONLY shows real HR contacts when contact_finder
+    actually found them on the company website. No pattern-guessed emails —
+    those were misleading. If we have nothing real, the email section is
+    omitted entirely; the user still gets search shortcuts + apply method.
     """
     company_safe = html.escape(company)
     method, tip = _detect_apply_method(source, url)
@@ -1133,26 +1133,25 @@ def _hr_panel_html(company: str, verified: list[str], guessed: list[str],
                       f"padding:4px 11px;border-radius:6px;font-size:.74rem;font-weight:700;"
                       f"text-decoration:none'>Apply now →</a>" if url else "")
 
-    def email_chip(email: str, is_real: bool) -> str:
-        bg = "rgba(236,72,153,.16)" if is_real else "rgba(236,72,153,.06)"
-        tag = "" if is_real else " <span style='opacity:.6;font-weight:500'>(guess)</span>"
+    def email_chip(email: str) -> str:
         return (f"<a href='mailto:{html.escape(email)}?subject={quote_plus('Application for role at ' + company)}' "
-                f"style='background:{bg};color:#be185d;padding:3px 9px;border-radius:5px;"
+                f"style='background:rgba(16,185,129,.14);color:#047857;padding:3px 9px;border-radius:5px;"
                 f"font-size:.72rem;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:.2rem'>"
-                f"📧 {html.escape(email)}{tag}</a>")
+                f"📧 {html.escape(email)}</a>")
 
-    real_chips = "".join(email_chip(e, True) for e in verified[:5])
-    guess_chips = "".join(email_chip(e, False) for e in guessed[:7])
-
-    real_block = (f"<div style='margin-bottom:.6rem'><div style='font-size:.68rem;font-weight:800;"
-                  f"text-transform:uppercase;letter-spacing:.5px;color:#0a7d28;margin-bottom:.3rem'>"
-                  f"✅ Verified emails (found on company website)</div>"
-                  f"<div style='display:flex;gap:5px;flex-wrap:wrap'>{real_chips}</div></div>") if verified else ""
-
-    guess_block = (f"<div style='margin-bottom:.6rem'><div style='font-size:.68rem;font-weight:800;"
-                   f"text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:.3rem'>"
-                   f"💡 Pattern-guessed HR emails (verify before sending)</div>"
-                   f"<div style='display:flex;gap:5px;flex-wrap:wrap'>{guess_chips}</div></div>") if guessed else ""
+    if verified:
+        real_chips = "".join(email_chip(e) for e in verified[:5])
+        real_block = (f"<div style='margin-bottom:.6rem'><div style='font-size:.68rem;font-weight:800;"
+                      f"text-transform:uppercase;letter-spacing:.5px;color:#0a7d28;margin-bottom:.3rem'>"
+                      f"✅ Verified emails (found on {company_safe}'s website)</div>"
+                      f"<div style='display:flex;gap:5px;flex-wrap:wrap'>{real_chips}</div></div>")
+        button_label = f"📧 {len(verified)} verified HR email{'s' if len(verified) != 1 else ''} &amp; apply info  ▾"
+    else:
+        real_block = (f"<div style='margin-bottom:.7rem;padding:.55rem .8rem;background:rgba(0,0,0,.03);"
+                      f"border-left:3px solid var(--text-muted);border-radius:5px;font-size:.78rem;color:var(--text-muted)'>"
+                      f"<b>No verified HR email found</b> for {company_safe}. Use the search links below "
+                      f"to find a specific recruiter on LinkedIn — we won't guess emails that might bounce.</div>")
+        button_label = f"🔎 Find HR &amp; how to apply  ▾"
 
     return f"""
 <details style='margin-top:8px'>
@@ -1164,12 +1163,11 @@ def _hr_panel_html(company: str, verified: list[str], guessed: list[str],
                   transition:transform .15s, box-shadow .15s'
            onmouseover='this.style.transform="translateY(-1px)";this.style.boxShadow="0 6px 16px rgba(124,58,237,.4)"'
            onmouseout='this.style.transform="translateY(0)";this.style.boxShadow="0 4px 12px rgba(124,58,237,.25)"'>
-    📧 Click to see HR emails &amp; apply info  ▾
+    {button_label}
   </summary>
   <div style='margin-top:.5rem;padding:.8rem 1rem;background:var(--surface-alt);
               border:1px solid var(--border);border-radius:9px;font-size:.82rem'>
     {real_block}
-    {guess_block}
     <div style='margin-bottom:.6rem'>
       <div style='font-size:.68rem;font-weight:800;text-transform:uppercase;
                   letter-spacing:.5px;color:var(--text-muted);margin-bottom:.3rem'>
@@ -1293,21 +1291,15 @@ def _job_rows(jobs: list[dict]) -> str:
             chips.append(f"<span style='background:rgba(79,70,229,.12);color:#4338ca;padding:2px 7px;border-radius:4px;font-size:.72rem;font-weight:700'>📊 {html.escape(meta['experience'])}</span>")
         for skill in meta["skills"][:3]:
             chips.append(f"<span style='background:rgba(124,58,237,.08);color:#7c3aed;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:600'>🛠 {html.escape(skill)}</span>")
-        # ── HR / Application Hub: hidden by default, expanded via <details>
-        # Shows ALL contact options, search shortcuts, apply tips, and helpers.
+        # ── HR / Application Hub: only REAL emails (no pattern guesses).
+        # If contact_finder found nothing, the panel still shows search links
+        # + apply method but omits the email section entirely. No misleading
+        # 'careers@{guess}.com' chips.
         verified_emails = list(raw.get("hr_emails") or [])
-        guessed_emails: list[str] = []
-        if company:
-            domain = _guess_company_domain(company)
-            if domain:
-                guessed_emails = [f"careers@{domain}", f"hr@{domain}",
-                                  f"talent@{domain}", f"recruit@{domain}",
-                                  f"jobs@{domain}", f"hiring@{domain}",
-                                  f"people@{domain}"]
-        if chips:  # only render chips block if we have any to show
+        if chips:
             title_html += "<div style='display:flex;gap:4px;flex-wrap:wrap;margin-top:5px'>" + "".join(chips) + "</div>"
-        if company and (verified_emails or guessed_emails):
-            title_html += _hr_panel_html(company, verified_emails, guessed_emails, source, url)
+        if company:
+            title_html += _hr_panel_html(company, verified_emails, source, url)
 
         apply_html = (
             f"<a href='{html.escape(url)}' target='_blank' rel='noopener' "
