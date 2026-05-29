@@ -139,6 +139,69 @@ _HEAD = """
    66%     { transform:translate(60px,-120px) scale(.9); }
  }
 
+ /* ----- Dotted grid texture overlay — gives the whole page a sense of depth ----- */
+ body::before{
+   content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
+   background-image:radial-gradient(circle, var(--text-muted) 1.1px, transparent 1.1px);
+   background-size:36px 36px;
+   opacity:.06;
+ }
+
+ /* ----- Floating career-themed decorations — slow drift, low opacity ----- */
+ .floater{
+   position:fixed;font-size:1.9rem;opacity:.16;
+   pointer-events:none;z-index:-1;will-change:transform;
+   filter:saturate(1.2);
+ }
+ [data-theme='dark'] .floater{ opacity:.12; }
+ .floater-1{ top:11%;  left:6%;   animation:driftA 22s ease-in-out infinite; }
+ .floater-2{ top:26%;  right:9%;  animation:driftB 26s ease-in-out infinite; animation-delay:-3s; }
+ .floater-3{ top:45%;  left:4%;   animation:driftA 24s ease-in-out infinite; animation-delay:-8s; }
+ .floater-4{ top:62%;  right:6%;  animation:driftB 28s ease-in-out infinite; animation-delay:-12s; }
+ .floater-5{ top:80%;  left:14%;  animation:driftA 30s ease-in-out infinite; animation-delay:-5s; }
+ .floater-6{ top:18%;  left:48%;  animation:driftB 25s ease-in-out infinite; animation-delay:-10s; }
+ .floater-7{ top:55%;  right:28%; animation:driftA 27s ease-in-out infinite; animation-delay:-15s; }
+ .floater-8{ top:38%;  left:23%;  animation:driftB 23s ease-in-out infinite; animation-delay:-7s; }
+ .floater-9{ top:73%;  left:50%;  animation:driftA 29s ease-in-out infinite; animation-delay:-18s; }
+ .floater-10{top:8%;   right:26%; animation:driftB 31s ease-in-out infinite; animation-delay:-22s; }
+ .floater-11{top:33%;  right:42%; animation:driftA 28s ease-in-out infinite; animation-delay:-2s; }
+ .floater-12{top:88%;  right:18%; animation:driftB 26s ease-in-out infinite; animation-delay:-14s; }
+
+ @keyframes driftA{
+   0%,100% { transform:translate(0,0) rotate(0deg) scale(1); }
+   25%     { transform:translate(36px,-26px) rotate(10deg) scale(1.1); }
+   50%     { transform:translate(-22px,46px) rotate(-6deg) scale(.95); }
+   75%     { transform:translate(-36px,18px) rotate(4deg) scale(1.05); }
+ }
+ @keyframes driftB{
+   0%,100% { transform:translate(0,0) rotate(0deg) scale(1); }
+   25%     { transform:translate(-28px,-38px) rotate(-10deg) scale(.95); }
+   50%     { transform:translate(46px,-18px) rotate(12deg) scale(1.1); }
+   75%     { transform:translate(28px,38px) rotate(-5deg) scale(1.05); }
+ }
+
+ /* Outlined geometric shapes — subtle, behind everything */
+ .deco{ position:fixed; pointer-events:none; z-index:-1; opacity:.22; }
+ [data-theme='dark'] .deco{ opacity:.14; }
+ .deco-circle{
+   width:80px; height:80px; border-radius:50%;
+   border:2px solid var(--primary);
+   top:30%; left:55%;
+   animation:driftA 35s ease-in-out infinite;
+ }
+ .deco-square{
+   width:60px; height:60px; border-radius:10px;
+   border:2px solid #ec4899; transform:rotate(45deg);
+   bottom:18%; left:62%;
+   animation:driftB 40s ease-in-out infinite; animation-delay:-12s;
+ }
+ .deco-ring{
+   width:120px; height:120px; border-radius:50%;
+   border:3px dashed #06b6d4;
+   top:62%; right:14%;
+   animation:driftA 45s linear infinite;
+ }
+
  /* Glassmorphism — cards float over the animated background */
  .card{
    backdrop-filter:blur(10px) saturate(1.2);
@@ -666,9 +729,29 @@ def _page() -> str:
     return f"""<!doctype html><html lang="en" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AI Career Agent</title>{_HEAD}</head><body data-job-count="{active_count}">
+<!-- Animated gradient blobs (color haze) -->
 <div class="bg-blob bg-blob-1"></div>
 <div class="bg-blob bg-blob-2"></div>
 <div class="bg-blob bg-blob-3"></div>
+
+<!-- Outlined geometric shapes drifting in the background -->
+<div class="deco deco-circle"></div>
+<div class="deco deco-square"></div>
+<div class="deco deco-ring"></div>
+
+<!-- Career-themed emoji decorations drifting at different speeds -->
+<div class="floater floater-1">💼</div>
+<div class="floater floater-2">🚀</div>
+<div class="floater floater-3">⭐</div>
+<div class="floater floater-4">📈</div>
+<div class="floater floater-5">🎯</div>
+<div class="floater floater-6">✨</div>
+<div class="floater floater-7">💡</div>
+<div class="floater floater-8">📊</div>
+<div class="floater floater-9">🏆</div>
+<div class="floater floater-10">🎓</div>
+<div class="floater floater-11">💻</div>
+<div class="floater floater-12">🌟</div>
 
 <header class="hero">
   <div>
