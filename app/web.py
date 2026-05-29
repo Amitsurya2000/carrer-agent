@@ -358,9 +358,37 @@ _HEAD = """
    text-transform:uppercase;letter-spacing:.5px;background:var(--surface);
  }
  td{padding:11px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
- tbody tr{transition:background .12s}
- tbody tr:nth-child(even){background:var(--surface-alt)}
- tbody tr:hover{background:var(--primary-light)}
+ tbody tr{transition:transform .18s, background .18s, box-shadow .18s}
+ tbody tr:nth-child(even){background:rgba(0,0,0,.015)}
+ [data-theme='dark'] tbody tr:nth-child(even){background:rgba(255,255,255,.02)}
+ tbody tr:hover{
+   background:var(--primary-light) !important;
+   transform:translateX(4px);
+   box-shadow:-4px 0 0 0 var(--primary), 0 2px 12px rgba(79,70,229,.08);
+ }
+ td{padding:13px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+ tbody tr td:first-child{padding-left:14px}
+
+ /* Hot match rows — gradient strip + pink accent border */
+ tr.hot-row{
+   background:linear-gradient(90deg, rgba(236,72,153,.10) 0%, rgba(236,72,153,.04) 30%, transparent 70%) !important;
+   border-left:4px solid #ec4899;
+ }
+ tr.hot-row:hover{
+   background:linear-gradient(90deg, rgba(236,72,153,.20) 0%, rgba(79,70,229,.08) 50%, transparent 90%) !important;
+   box-shadow:-4px 0 0 0 #ec4899, 0 4px 18px rgba(236,72,153,.14);
+ }
+ tr.hot-row td:first-child{
+   color:#ec4899 !important;font-weight:800;
+ }
+
+ /* Active jobs header gets a colorful icon backdrop */
+ .card h3 .h3-icon{
+   display:inline-flex;align-items:center;justify-content:center;
+   width:34px;height:34px;border-radius:10px;margin-right:.5rem;
+   background:linear-gradient(135deg,var(--primary),#ec4899);color:#fff;
+   font-size:1.1rem;box-shadow:0 4px 10px rgba(79,70,229,.25);
+ }
 
  a{color:var(--primary);text-decoration:none;font-weight:500}
  a:hover{text-decoration:underline}
@@ -620,16 +648,49 @@ def _limit_dropdown(current: str) -> str:
 
 
 def _score_badge(score) -> str:
-    """Color-coded pill: green ≥70 (with pulse glow on ≥90), yellow 40-69, red <40."""
+    """Color-coded gradient pill: green ≥70 (with pulse glow on ≥85), yellow 40-69, red <40."""
     if score is None:
         return "<span style='color:#888'>-</span>"
     s = int(score)
-    if s >= 70:    bg = "#0a7d28"
-    elif s >= 40:  bg = "#c69500"
-    else:          bg = "#bb2222"
-    cls = " score-glow" if s >= 90 else ""
-    return (f"<span class='{cls.strip()}' style='background:{bg};color:#fff;padding:3px 11px;"
-            f"border-radius:999px;font-weight:700;font-size:.85rem;display:inline-block'>{s}</span>")
+    if s >= 70:    bg = "linear-gradient(135deg,#10b981,#059669)"
+    elif s >= 40:  bg = "linear-gradient(135deg,#f59e0b,#d97706)"
+    else:          bg = "linear-gradient(135deg,#ef4444,#dc2626)"
+    cls = " score-glow" if s >= 85 else ""
+    return (f"<span class='{cls.strip()}' style='background:{bg};color:#fff;padding:6px 14px;"
+            f"border-radius:999px;font-weight:800;font-size:.95rem;display:inline-block;"
+            f"min-width:46px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.12)'>{s}</span>")
+
+
+_SOURCE_COLORS = {
+    "naukri": "#f97316", "linkedin": "#0a66c2", "indeed": "#003a9b",
+    "wellfound": "#ec4899", "foundit": "#a855f7", "shine": "#06b6d4",
+    "glassdoor": "#0caa41", "apna": "#16a34a", "internshala": "#3b82f6",
+    "jobsforher": "#db2777", "workindia": "#f59e0b", "hirist": "#1d4ed8",
+    "cutshort": "#7c3aed", "instahyre": "#9333ea", "timesjobs": "#dc2626",
+    "razorpay": "#0c2074", "zomato": "#e23744", "phonepe": "#5f259f",
+    "cred": "#000000", "meesho": "#9333ea", "ola": "#84cc16",
+    "paytm": "#012a72", "freshworks": "#1f8b4c", "zerodha": "#387ed1",
+    "groww": "#00b386", "postman": "#ef5b25", "zoho": "#cc2640",
+    "swiggy": "#fc8019", "flipkart": "#2874f0",
+    "google": "#4285f4", "microsoft": "#00a4ef", "amazon": "#ff9900",
+    "meta": "#0668e1", "adobe": "#fa0f00", "ibm": "#1f70c1",
+    "nvidia": "#76b900", "apple": "#0a0a0a", "oracle": "#c74634",
+    "salesforce": "#00a1e0", "sap": "#0070ad", "cisco": "#005073",
+    "intel": "#0071c5",
+    "tcs": "#e60000", "infosys": "#007cc3", "wipro": "#341e62",
+    "hcltech": "#0070b8", "techmahindra": "#e31837", "cognizant": "#005eb8",
+    "capgemini": "#0070ad", "ltimindtree": "#7e1f86",
+}
+
+
+def _source_pill(source: str | None) -> str:
+    if not source:
+        return ""
+    bg = _SOURCE_COLORS.get(source.lower(), "#6366f1")
+    return (f"<span style='background:{bg};color:#fff;padding:3px 10px;"
+            f"border-radius:6px;font-size:.72rem;font-weight:700;"
+            f"text-transform:lowercase;letter-spacing:.3px;"
+            f"box-shadow:0 1px 3px rgba(0,0,0,.15)'>{html.escape(source)}</span>")
 
 
 def _status_dropdown(job_id: str, current: str | None) -> str:
@@ -648,32 +709,44 @@ def _status_dropdown(job_id: str, current: str | None) -> str:
 def _job_rows(jobs: list[dict]) -> str:
     rows = ""
     for i, j in enumerate(jobs, start=1):
+        score = int(j.get("score") or 0)
+        is_hot = score >= 85
         url = j.get("url") or ""
         title = str(j.get("title") or "")
         desc_short = (j.get("description") or "")[:240]
         raw = j.get("raw") or {}
         posted = (raw.get("created") or "")[:10] if raw.get("created") else (raw.get("posted_text") or "-")
         source = j.get("source") or raw.get("site") or ""
+        company = str(j.get("company") or "")
+
         title_html = (
             f"<a href='{html.escape(url)}' target='_blank' rel='noopener' "
-            f"title='{html.escape(desc_short)}'>{html.escape(title)}</a>"
+            f"title='{html.escape(desc_short)}' style='font-weight:600;color:var(--text)'>"
+            f"{html.escape(title)}</a>"
             if url else html.escape(title)
         )
+        # Hot match badge gets a fire emoji prefix on the title
+        if is_hot:
+            title_html = f"<span style='color:#ec4899;font-weight:800;font-size:.7rem;background:rgba(236,72,153,.12);padding:2px 7px;border-radius:4px;margin-right:6px;vertical-align:middle'>🔥 HOT</span>" + title_html
+
         apply_html = (
-            f"<a href='{html.escape(url)}' target='_blank' rel='noopener'>Apply &rarr;</a>"
+            f"<a href='{html.escape(url)}' target='_blank' rel='noopener' "
+            f"style='background:linear-gradient(135deg,var(--primary),#7c3aed);color:#fff;"
+            f"padding:5px 12px;border-radius:6px;font-size:.8rem;font-weight:700;"
+            f"text-decoration:none;display:inline-block;box-shadow:0 2px 6px rgba(79,70,229,.3);"
+            f"transition:transform .15s'>Apply →</a>"
             if url else ""
         )
-        source_html = (
-            f"<span style='background:#eef;color:#334;padding:1px 7px;border-radius:4px;"
-            f"font-size:.78rem'>{html.escape(source)}</span>" if source else ""
-        )
-        rows += (f"<tr><td>{i}</td>"
+
+        row_cls = " class='hot-row'" if is_hot else ""
+        rows += (f"<tr{row_cls}>"
+                 f"<td style='font-weight:700;color:var(--text-muted)'>{i}</td>"
                  f"<td>{_score_badge(j.get('score'))}</td>"
                  f"<td>{title_html}</td>"
-                 f"<td>{html.escape(str(j.get('company') or ''))}</td>"
-                 f"<td>{html.escape(str(j.get('location') or ''))}</td>"
-                 f"<td>{html.escape(str(posted))}</td>"
-                 f"<td>{source_html}</td>"
+                 f"<td style='font-weight:600'>{html.escape(company)}</td>"
+                 f"<td class='muted' style='font-size:.84rem'>{html.escape(str(j.get('location') or ''))}</td>"
+                 f"<td class='muted' style='font-size:.82rem'>{html.escape(str(posted))}</td>"
+                 f"<td>{_source_pill(source)}</td>"
                  f"<td>{_status_dropdown(j.get('id'), j.get('status'))}</td>"
                  f"<td>{apply_html}</td></tr>")
     if rows:
@@ -744,14 +817,22 @@ def _page() -> str:
     if active:
         job_block = f"""
 <div class="card">
-  <h3><span>💼 Active jobs <span style="color:var(--primary);font-weight:600;font-size:.9rem">— {active_count} match{('' if active_count == 1 else 'es')}</span></span>{_limit_dropdown('30')}</h3>
+  <h3>
+    <span style="display:flex;align-items:center"><span class="h3-icon">💼</span>
+      <span>Active jobs <span style="background:linear-gradient(135deg,var(--primary),#ec4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;font-weight:800;font-size:1rem">— {active_count} match{('' if active_count == 1 else 'es')}</span></span>
+    </span>{_limit_dropdown('30')}
+  </h3>
   {_filter_pills_html()}
   <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
   <tbody>{active_html}</tbody></table>
 </div>
 
 <div class="card">
-  <h3>📋 Past / expired jobs <span class="muted">— {past_count} (posted &gt; {_EXPIRE_DAYS} days ago)</span></h3>
+  <h3>
+    <span style="display:flex;align-items:center"><span class="h3-icon" style="background:linear-gradient(135deg,#6b7280,#9ca3af)">📋</span>
+      <span>Past / expired jobs <span class="muted" style="font-weight:500">— {past_count} (posted &gt; {_EXPIRE_DAYS} days ago)</span></span>
+    </span>
+  </h3>
   <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
   <tbody>{past_html}</tbody></table>
 </div>"""
