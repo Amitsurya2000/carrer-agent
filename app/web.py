@@ -68,6 +68,13 @@ _EXPIRE_DAYS = 30
 # server restart. Good enough for a single-user local app.
 _LAST_FILTERS: dict[str, str] = {}
 
+# Session flag — only True between an Upload and a Clear/Remove/server-restart.
+# When False, the home page shows the empty 'Ready to find your next role' CTA
+# even if there are jobs already in the database. This is the user's explicit
+# ask: 'show job list ONLY when I upload the résumé'. Saved jobs stay in
+# Supabase, they just stay hidden behind the CTA until the next upload.
+_SESSION_HAS_UPLOAD = {"v": False}
+
 _HEAD = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -473,11 +480,13 @@ def _clear_jobs() -> None:
 
 
 def _refresh_for_active() -> None:
-    """Clear old jobs. The user must re-upload the active résumé to trigger a
-    fresh Chromium scrape — we don't auto-run Adzuna or any API source here.
-    Chromium-only is intentional.
+    """Clear old jobs AND drop the 'has uploaded this session' flag, so the
+    home page goes back to the empty CTA. The user must re-upload the active
+    résumé to trigger a fresh Chromium scrape — we don't auto-run any API
+    source here. Chromium-only is intentional.
     """
     _clear_jobs()
+    _SESSION_HAS_UPLOAD["v"] = False
 
 
 _FILTER_LABELS = {
@@ -841,15 +850,18 @@ def _page() -> str:
                     f"<b>108 platforms</b> &middot; <b>{active_count}</b> live matches found")
     else:
         subtitle = f"{greeting} &middot; Upload a résumé to scan 108 job platforms"
-    # When no résumé is active, hide the stat strip entirely — empty zeros
-    # everywhere are visual noise. The hero subtitle already nudges to upload.
-    stats_strip = _stats_strip(active_jobs, active_count) if active else ""
+    # Hide the stat strip entirely until the user uploads in this session —
+    # gated on the same flag as the job tables so the empty CTA is the only
+    # thing on the page until upload.
+    stats_strip = _stats_strip(active_jobs, active_count) if (active and _SESSION_HAS_UPLOAD["v"]) else ""
     marquee_html = ""  # placeholder; the marquee renders below the hero always — let HTML have it
 
-    # ── Job-list block: only rendered when a résumé is active. When there's
-    #    no résumé at all, the two job cards are REPLACED by a single big
-    #    "Upload to begin" CTA so the page is calm and obvious.
-    if active:
+    # ── Job-list block: only rendered when (a) there's an active résumé AND
+    #    (b) the user has clicked Upload in this server session. If either is
+    #    false, the two job cards are REPLACED by the empty CTA. This is the
+    #    explicit ask: 'show job list only when I upload the résumé'.
+    show_jobs = active and _SESSION_HAS_UPLOAD["v"]
+    if show_jobs:
         clear_btn = (f"<form method='post' action='/ui/clear' style='display:inline;margin-left:.6rem' "
                      f"onsubmit='return confirm(\"Clear all job results? Your résumé stays. You can re-upload to search again.\")'>"
                      f"<button class='danger' type='submit' style='padding:5px 12px;font-size:.82rem'>🗑 Clear results</button></form>")
@@ -892,7 +904,7 @@ def _page() -> str:
     <span>✨ See ranked jobs</span>
   </p>
 </div>"""
-    smart_banner = _smart_banner_html(active, active_jobs, active_count)
+    smart_banner = _smart_banner_html(active, active_jobs, active_count) if (active and _SESSION_HAS_UPLOAD["v"]) else ""
     vercel_banner = ('<div class="banner warn">☁️ <span><b>Hosted on Vercel.</b> '
                      'Uploads search Adzuna + Remotive + RemoteOK APIs (~2 s). For '
                      'the 108-site visible Chromium walk, run the project locally '
@@ -1277,6 +1289,10 @@ async def ui_upload(
     upload_profile(file.filename, text)
     # Clean slate: Active jobs starts EMPTY and only fills with the new search's results.
     _clear_jobs()
+    # Flip the session flag so the home page now renders the job tables instead
+    # of the empty CTA. The flag stays True until the user clicks Clear results,
+    # Remove résumé, switches résumé, or the server restarts.
+    _SESSION_HAS_UPLOAD["v"] = True
     # Stash the active filter snapshot in module state so the home page can show
     # filter pills AND apply the post-scrape filters (salary / sort / required skills).
     _LAST_FILTERS.update({
@@ -1389,9 +1405,10 @@ def api_jobs_count():
 @router.post("/ui/clear")
 def ui_clear():
     """Manually wipe all non-applied jobs from the table without removing the
-    active résumé — used when the user wants a fresh empty state without
-    starting over with their profile."""
+    active résumé — and drop the session flag so the home page renders the
+    empty CTA again."""
     _clear_jobs()
+    _SESSION_HAS_UPLOAD["v"] = False
     return RedirectResponse("/", status_code=303)
 
 
