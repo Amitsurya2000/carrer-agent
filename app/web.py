@@ -1113,6 +1113,10 @@ def _job_rows(jobs: list[dict]) -> str:
             chips.append(f"<span style='background:rgba(79,70,229,.12);color:#4338ca;padding:2px 7px;border-radius:4px;font-size:.72rem;font-weight:700'>📊 {html.escape(meta['experience'])}</span>")
         for skill in meta["skills"][:3]:
             chips.append(f"<span style='background:rgba(124,58,237,.08);color:#7c3aed;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:600'>🛠 {html.escape(skill)}</span>")
+        # HR emails found by contact_finder (clickable mailto)
+        hr_emails = (raw.get("hr_emails") or [])[:2]
+        for email in hr_emails:
+            chips.append(f"<a href='mailto:{html.escape(email)}' style='background:rgba(236,72,153,.12);color:#be185d;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:700;text-decoration:none'>📧 {html.escape(email)}</a>")
         if chips:
             title_html += "<div style='display:flex;gap:4px;flex-wrap:wrap;margin-top:5px'>" + "".join(chips) + "</div>"
 
@@ -1345,6 +1349,11 @@ def _page() -> str:
     <p class="muted" style="margin:.3rem 0 .9rem;font-size:.78rem">
       Leave blank to auto-detect from résumé. If you type a role, Chromium will search for <b>exactly that role</b> on every platform (Naukri, LinkedIn, Razorpay, etc).
     </p>
+    <label style="display:flex;align-items:center;gap:.55rem;padding:.6rem .85rem;border-radius:9px;border:1px dashed var(--border);background:var(--surface-alt);cursor:pointer;margin-bottom:.9rem;font-size:.88rem">
+      <input type="checkbox" name="find_contacts" value="1" style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer">
+      <span>🔎 <b>Also find HR / talent-acquisition emails</b> for each company
+      <span class="muted" style="font-weight:400">— adds 3–5 min. Headless Chromium visits each company's /contact, /careers, /about page and extracts generic HR emails (careers@, hr@, talent@…). Specific person emails require paid services.</span></span>
+    </label>
     <input name="location" placeholder="📍 Locations (comma-separated, e.g. Bengaluru, Hyderabad, Mumbai)" style="width:36%;padding:5px">
     &nbsp;
     <select name="experience" style="padding:5px">
@@ -1777,6 +1786,7 @@ async def ui_upload(
     priority_2: str = Form(""),
     priority_3: str = Form(""),
     role: str = Form(""),
+    find_contacts: str = Form(""),
 ):
     name = (file.filename or "").lower()
     if not name.endswith(_ALLOWED):
@@ -1843,8 +1853,9 @@ async def ui_upload(
         # because sys.executable in Microsoft's Playwright base image can point to
         # a python that doesn't have playwright. The container's PATH `python3` is
         # the same one the Dockerfile verifies playwright is importable from.
+        contact_step = " && python3 -m app.scrape.contact_finder" if find_contacts else ""
         cmd_str = ("python3 -m app.scrape.multi_site && "
-                   "python3 -m app.scrape.hn_hiring")
+                   "python3 -m app.scrape.hn_hiring" + contact_step)
         try:
             subprocess.Popen(
                 ["sh", "-c", cmd_str],
@@ -1863,6 +1874,11 @@ async def ui_upload(
             [sys.executable, "-m", "app.scrape.hn_hiring"],
             env=env, timeout=600,
         )
+        if find_contacts:
+            _visible_subprocess(
+                [sys.executable, "-m", "app.scrape.contact_finder"],
+                env=env, timeout=600,
+            )
         try:
             score_pending_keyword()
         except Exception:
