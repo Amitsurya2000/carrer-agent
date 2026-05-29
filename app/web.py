@@ -147,20 +147,22 @@ _HEAD = """
  }
 
  /* ----- Dotted grid texture overlay — gives the whole page a sense of depth ----- */
- body::before{
-   content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
-   background-image:radial-gradient(circle, var(--text-muted) 1.1px, transparent 1.1px);
-   background-size:36px 36px;
-   opacity:.06;
+ /* On <html> (not body::before) so it shows through the transparent body */
+ html::before{
+   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+   background-image:radial-gradient(circle, var(--text-muted) 1.3px, transparent 1.3px);
+   background-size:32px 32px;
+   opacity:.22;
  }
+ [data-theme='dark'] html::before{ opacity:.14; }
 
  /* ----- Floating career-themed decorations — slow drift, low opacity ----- */
  .floater{
-   position:fixed;font-size:1.9rem;opacity:.16;
+   position:fixed;font-size:2rem;opacity:.32;
    pointer-events:none;z-index:-1;will-change:transform;
-   filter:saturate(1.2);
+   filter:saturate(1.3);
  }
- [data-theme='dark'] .floater{ opacity:.12; }
+ [data-theme='dark'] .floater{ opacity:.22; }
  .floater-1{ top:11%;  left:6%;   animation:driftA 22s ease-in-out infinite; }
  .floater-2{ top:26%;  right:9%;  animation:driftB 26s ease-in-out infinite; animation-delay:-3s; }
  .floater-3{ top:45%;  left:4%;   animation:driftA 24s ease-in-out infinite; animation-delay:-8s; }
@@ -187,26 +189,36 @@ _HEAD = """
    75%     { transform:translate(28px,38px) rotate(-5deg) scale(1.05); }
  }
 
- /* Outlined geometric shapes — subtle, behind everything */
- .deco{ position:fixed; pointer-events:none; z-index:-1; opacity:.22; }
- [data-theme='dark'] .deco{ opacity:.14; }
+ /* Outlined geometric shapes — at viewport edges where they're not hidden by cards */
+ .deco{ position:fixed; pointer-events:none; z-index:-1; opacity:.55; }
+ [data-theme='dark'] .deco{ opacity:.4; }
  .deco-circle{
-   width:80px; height:80px; border-radius:50%;
-   border:2px solid var(--primary);
-   top:30%; left:55%;
+   width:110px; height:110px; border-radius:50%;
+   border:3px solid var(--primary);
+   top:8%; right:3%;                /* moved to top-right corner — visible above cards */
    animation:driftA 35s ease-in-out infinite;
  }
  .deco-square{
-   width:60px; height:60px; border-radius:10px;
-   border:2px solid #ec4899; transform:rotate(45deg);
-   bottom:18%; left:62%;
+   width:80px; height:80px; border-radius:14px;
+   border:3px solid #ec4899; transform:rotate(45deg);
+   bottom:8%; left:2%;              /* moved to bottom-left corner */
    animation:driftB 40s ease-in-out infinite; animation-delay:-12s;
  }
  .deco-ring{
-   width:120px; height:120px; border-radius:50%;
+   width:140px; height:140px; border-radius:50%;
    border:3px dashed #06b6d4;
-   top:62%; right:14%;
+   top:48%; right:-30px;            /* peeking off the right edge of the viewport */
    animation:driftA 45s linear infinite;
+ }
+ .deco-triangle{                    /* new — bottom-right outlined triangle */
+   width:0;height:0;
+   border-left:38px solid transparent;border-right:38px solid transparent;
+   border-bottom:60px solid transparent;
+   filter:drop-shadow(0 0 0 #10b981);  /* gives the empty triangle an outline tint */
+   bottom:30%; right:-10px;
+   border-bottom-color:#10b981;
+   opacity:.6;
+   animation:driftB 50s ease-in-out infinite; animation-delay:-7s;
  }
 
  /* Glassmorphism — cards float over the animated background */
@@ -741,10 +753,11 @@ def _page() -> str:
 <div class="bg-blob bg-blob-2"></div>
 <div class="bg-blob bg-blob-3"></div>
 
-<!-- Outlined geometric shapes drifting in the background -->
+<!-- Outlined geometric shapes drifting at viewport edges (above cards) -->
 <div class="deco deco-circle"></div>
 <div class="deco deco-square"></div>
 <div class="deco deco-ring"></div>
+<div class="deco deco-triangle"></div>
 
 <!-- Career-themed emoji decorations drifting at different speeds -->
 <div class="floater floater-1">💼</div>
