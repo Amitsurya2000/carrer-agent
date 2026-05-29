@@ -433,11 +433,8 @@ _HEAD = """
    background:#ef4444;color:#fff;border-color:#ef4444;
  }
 
- /* ───── Hero-style upload card layout ───── */
- .upload-hero{
-   display:grid;grid-template-columns:1.4fr 1fr;gap:2rem;align-items:center;
- }
- @media (max-width:880px){ .upload-hero{ grid-template-columns:1fr; gap:1.4rem; } }
+ /* ───── Hero-style upload card layout (single column — was 2-column, now centered) ───── */
+ .upload-hero{ display:block; max-width:720px; }
 
  .how-flow{
    display:flex;flex-direction:column;gap:.8rem;
@@ -716,25 +713,6 @@ def _filter_pills_html() -> str:
     return ("<div style='margin:.4rem 0 1rem'><b style='font-size:.78rem;"
             "color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px'>"
             "Active filters</b><br>" + "".join(pills) + "</div>")
-
-
-_HOW_IT_WORKS = [
-    ("📄", "Upload your résumé",     "PDF or DOCX • parsed in seconds"),
-    ("🎯", "Pick filters",            "Location, experience, company type"),
-    ("🚀", "We scan 108 platforms",   "Naukri, LinkedIn, Razorpay, Google…"),
-    ("✨", "Ranked matches",          "Scored by skill overlap, live-streamed"),
-]
-
-
-def _how_it_works_html() -> str:
-    steps = "".join(
-        f"<div class='how-step'>"
-        f"<div class='how-step-num'>{html.escape(emoji)}</div>"
-        f"<div><div class='how-step-text'>{html.escape(t)}</div>"
-        f"<div class='how-step-sub'>{html.escape(sub)}</div></div></div>"
-        for emoji, t, sub in _HOW_IT_WORKS
-    )
-    return f"<div class='how-flow'>{steps}</div>"
 
 
 def _featured_match_html(jobs: list[dict]) -> str:
@@ -1157,12 +1135,8 @@ def _page() -> str:
                      'the 108-site visible Chromium walk, run the project locally '
                      'and double-click <code>start.bat</code>.</span></div>'
                      if IS_VERCEL else '')
-    cloud_banner = ('<div class="banner info">☁️ <span><b>Hosted on Render</b> &middot; '
-                    'After clicking Upload, the headless Chromium 108-site scrape '
-                    'runs <b>in the background</b> (no pop-up windows — cloud has no screen). '
-                    'Wait <b>3–5 minutes</b> then <b>refresh this page</b> to see new jobs. '
-                    'Live progress is in <i>Render dashboard → Logs tab</i>.</span></div>'
-                    if IS_CLOUD else '')
+    # (cloud_banner removed — user found it noisy. Render is still detected via
+    # IS_CLOUD for scrape behavior, just no longer announced in the UI.)
 
     return f"""<!doctype html><html lang="en" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1205,7 +1179,6 @@ def _page() -> str:
 {stats_strip}
 {smart_banner}
 {vercel_banner}
-{cloud_banner}
 
 <div class="card reveal">
   <div class="upload-hero">
@@ -1429,12 +1402,8 @@ def _page() -> str:
     </details>
       </form>
     </div>
-    <div>
-      {_how_it_works_html()}
-    </div>
   </div>
-  <p class="muted" style="margin-top:1.4rem;padding-top:1.2rem;border-top:1px solid var(--border)">Uploading opens visible Chromium windows that walk <b>up to ~108 platforms</b>: 15 job boards (Naukri, LinkedIn, Indeed, Foundit, Shine, Glassdoor, Apna, Internshala, JobsForHer, WorkIndia, Hirist, Cutshort, Instahyre, TimesJobs, Wellfound) + 46 Indian startups/unicorns (Razorpay, Zomato, PhonePe, Cred, Meesho, BYJU's, Unacademy, Dream11, MakeMyTrip, Nykaa, BharatPe, Urban Company, Lenskart, OYO, Acko, Practo, PharmEasy, etc.) + 15 IT services (TCS, Infosys, Wipro, HCL, Tech Mahindra, Cognizant, Capgemini, LTIMindtree, etc.) + 32 MNCs (Google, Microsoft, Amazon, Meta, Apple, Oracle, Salesforce, SAP, Cisco, Intel, Adobe, IBM, Nvidia, Atlassian, ServiceNow, Snowflake, Databricks, Uber, Netflix, JPMorgan, Goldman, Citi, Deloitte, Accenture, etc.). <b>Location</b> is injected into the URL of every site that supports it. <b>Company size</b> picks which career pages are scraped — Startup (~61 sites), Mid-level (~30 sites), MNC (~47 sites), or blank for all ~108. Boards always run.</p>
-  <table><thead><tr><th>Resume</th><th>Keywords</th><th>Active</th><th></th></tr></thead>
+  <table style="margin-top:1.4rem"><thead><tr><th>Resume</th><th>Keywords</th><th>Active</th><th></th></tr></thead>
   <tbody>{prof_rows}</tbody></table>
 </div>
 
