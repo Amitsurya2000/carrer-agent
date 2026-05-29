@@ -534,6 +534,101 @@ _HEAD = """
  .reveal{ opacity:0;transform:translateY(20px);transition:opacity .6s ease, transform .6s ease; }
  .reveal.in{ opacity:1;transform:translateY(0); }
 
+ /* ───── Advanced filters — modern sectioned layout (LinkedIn / Naukri style) ───── */
+ details.adv-filters{
+   margin-top:1.2rem;border-radius:14px;
+   background:linear-gradient(135deg, rgba(79,70,229,.04), rgba(236,72,153,.02));
+   border:1px solid var(--border);overflow:hidden;
+ }
+ details.adv-filters > summary{
+   cursor:pointer;padding:14px 18px;list-style:none;
+   display:flex;align-items:center;justify-content:space-between;
+   font-weight:700;color:var(--text);font-size:.95rem;
+   transition:background .2s;
+ }
+ details.adv-filters > summary::-webkit-details-marker{display:none}
+ details.adv-filters > summary:hover{background:rgba(79,70,229,.05)}
+ details.adv-filters > summary::after{
+   content:'▾';color:var(--primary);font-size:.9rem;
+   transition:transform .25s;
+ }
+ details.adv-filters[open] > summary::after{ transform:rotate(180deg); }
+ details.adv-filters > summary span.adv-icon{
+   display:inline-flex;align-items:center;justify-content:center;
+   width:32px;height:32px;border-radius:9px;margin-right:.6rem;
+   background:linear-gradient(135deg,var(--primary),#7c3aed);color:#fff;
+   font-size:.95rem;box-shadow:0 3px 8px rgba(79,70,229,.25);
+ }
+
+ .adv-body{padding:1.2rem 1.4rem 1.5rem;display:grid;gap:1.1rem}
+
+ .filter-section{
+   background:var(--surface);border-radius:12px;
+   border:1px solid var(--border);padding:1rem 1.15rem;
+   box-shadow:var(--shadow-sm);
+ }
+ .filter-section-title{
+   display:flex;align-items:center;gap:.55rem;
+   font-size:.78rem;font-weight:800;color:var(--text-muted);
+   text-transform:uppercase;letter-spacing:.7px;
+   margin-bottom:.85rem;padding-bottom:.6rem;
+   border-bottom:1px solid var(--border);
+ }
+ .filter-section-title-icon{
+   display:inline-flex;align-items:center;justify-content:center;
+   width:24px;height:24px;border-radius:7px;
+   background:var(--primary-light);color:var(--primary);
+   font-size:.78rem;
+ }
+ .filter-grid{
+   display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;
+ }
+ @media (max-width:680px){ .filter-grid{ grid-template-columns:1fr; } }
+
+ .filter-grid label{
+   display:flex;flex-direction:column;gap:.32rem;
+   font-size:.78rem;font-weight:600;color:var(--text-muted);
+   letter-spacing:.2px;
+ }
+ .filter-grid label select,
+ .filter-grid label input{
+   width:100%;padding:9px 12px;font-size:.9rem;font-weight:500;
+   border:1px solid var(--border);border-radius:9px;
+   background:var(--bg);color:var(--text);
+   transition:border-color .15s, box-shadow .15s, background .15s;
+ }
+ .filter-grid label select:hover,
+ .filter-grid label input:hover{ background:var(--surface); }
+ .filter-grid label select:focus,
+ .filter-grid label input:focus{
+   outline:none;border-color:var(--primary);
+   box-shadow:0 0 0 3px rgba(79,70,229,.12);
+ }
+ .filter-grid .full{ grid-column:1/-1; }
+
+ .filter-check{
+   display:flex;align-items:center;gap:.55rem;
+   padding:.55rem .8rem;border-radius:9px;
+   border:1px solid var(--border);background:var(--bg);
+   cursor:pointer;transition:all .15s;font-size:.88rem;font-weight:500;
+ }
+ .filter-check:hover{ border-color:var(--primary);background:var(--primary-light); }
+ .filter-check input[type=checkbox]{
+   width:16px;height:16px;accent-color:var(--primary);cursor:pointer;
+ }
+ .filter-check:has(input:checked){
+   border-color:var(--primary);background:var(--primary-light);color:var(--primary);font-weight:700;
+ }
+
+ /* Priority chips (1st/2nd/3rd) — compact horizontal */
+ .priority-row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+ .priority-row > div{flex:1;min-width:160px;display:flex;flex-direction:column;gap:.25rem}
+ .priority-label{
+   display:inline-block;font-size:.7rem;font-weight:800;letter-spacing:.5px;
+   text-transform:uppercase;color:var(--primary);
+   background:var(--primary-light);padding:2px 8px;border-radius:6px;align-self:flex-start;
+ }
+
  a{color:var(--primary);text-decoration:none;font-weight:500}
  a:hover{text-decoration:underline}
 
@@ -1152,128 +1247,185 @@ def _page() -> str:
     <span id="time-est" class="muted" style="font-size:.85rem"></span>
     <br><br>
     <button class="cta" type="submit">🚀 Upload résumé + Search jobs</button>
-    <details style="margin-top:12px">
-      <summary style="cursor:pointer;color:#1d6ef0;font-weight:600">+ Advanced filters (date posted / job type / work mode / salary / skills / company stage / sort / …)</summary>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;padding:10px;background:#fafafa;border-radius:6px">
-        <label>Date posted
-          <select name="date_posted" style="width:100%;padding:5px">
-            <option value="">Any time</option>
-            <option value="1">Last 24 hours</option>
-            <option value="3">Last 3 days</option>
-            <option value="7">Last week</option>
-            <option value="30">Last month</option>
-          </select>
-        </label>
-        <label>Work mode
-          <select name="work_mode" style="width:100%;padding:5px">
-            <option value="">Any work mode</option>
-            <option value="onsite">On-site</option>
-            <option value="hybrid">Hybrid</option>
-            <option value="remote">Remote</option>
-          </select>
-        </label>
-        <label>Job type
-          <select name="job_type" style="width:100%;padding:5px">
-            <option value="">Any job type</option>
-            <option value="fulltime">Full-time</option>
-            <option value="parttime">Part-time</option>
-            <option value="contract">Contract</option>
-            <option value="temporary">Temporary</option>
-            <option value="internship">Internship</option>
-            <option value="freelance">Freelance</option>
-          </select>
-        </label>
-        <label>Min salary (LPA)
-          <input name="min_salary" type="number" min="0" step="1" style="width:100%;padding:5px" placeholder="e.g. 8">
-        </label>
-        <label>Min equity (%)
-          <input name="min_equity" type="number" min="0" max="100" step="0.1" style="width:100%;padding:5px" placeholder="e.g. 0.25">
-        </label>
-        <label>Joining date
-          <select name="joining_date" style="width:100%;padding:5px">
-            <option value="">Any</option>
-            <option value="immediate">Immediately</option>
-            <option value="within_1_month">Within 1 month</option>
-            <option value="flexible">Flexible</option>
-          </select>
-        </label>
-        <label>Notice period
-          <select name="notice_period" style="width:100%;padding:5px">
-            <option value="">Any</option>
-            <option value="15">15 days</option>
-            <option value="30">30 days</option>
-            <option value="60">60 days</option>
-            <option value="90">90 days</option>
-          </select>
-        </label>
-        <label>Employee count
-          <select name="employee_count" style="width:100%;padding:5px">
-            <option value="">Any</option>
-            <option value="1-10">1–10</option>
-            <option value="11-50">11–50</option>
-            <option value="51-200">51–200</option>
-            <option value="201-500">201–500</option>
-            <option value="501-1000">501–1,000</option>
-            <option value="1001-5000">1,001–5,000</option>
-            <option value="5000+">5,000+</option>
-          </select>
-        </label>
-        <label>Company stage
-          <select name="company_stage" style="width:100%;padding:5px">
-            <option value="">Any</option>
-            <option value="seed">Seed</option>
-            <option value="series-a">Series A</option>
-            <option value="series-b">Series B</option>
-            <option value="series-c">Series C+</option>
-            <option value="public">Public</option>
-          </select>
-        </label>
-        <label>Industry
-          <input name="industry" style="width:100%;padding:5px" placeholder="e.g. FinTech, HealthTech, SaaS">
-        </label>
-        <label style="grid-column:span 3">Required skills (comma-separated)
-          <input name="required_skills" style="width:100%;padding:5px" placeholder="e.g. python, aws, react, kubernetes">
-        </label>
-        <label style="grid-column:span 3">Company priority order <span class="muted" style="font-weight:400">(overrides "Company size" above &mdash; 1st-preference career pages are scraped first, then 2nd, then 3rd)</span>
-          <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
-            <span style="font-size:.85rem;min-width:36px">1st:</span>
-            <select name="priority_1" style="flex:1;padding:5px">
-              <option value="">— none —</option>
-              <option value="startup">Startup / Unicorn (1–500 employees)</option>
-              <option value="midlevel">Mid-level / IT services (500–50,000)</option>
-              <option value="mnc">MNC (50,000+)</option>
-            </select>
-            <span style="font-size:.85rem;min-width:36px">2nd:</span>
-            <select name="priority_2" style="flex:1;padding:5px">
-              <option value="">— none —</option>
-              <option value="startup">Startup / Unicorn</option>
-              <option value="midlevel">Mid-level / IT services</option>
-              <option value="mnc">MNC</option>
-            </select>
-            <span style="font-size:.85rem;min-width:36px">3rd:</span>
-            <select name="priority_3" style="flex:1;padding:5px">
-              <option value="">— none —</option>
-              <option value="startup">Startup / Unicorn</option>
-              <option value="midlevel">Mid-level / IT services</option>
-              <option value="mnc">MNC</option>
-            </select>
+    <details class="adv-filters">
+      <summary>
+        <span style="display:flex;align-items:center">
+          <span class="adv-icon">⚙</span>
+          Advanced filters
+          <span class="muted" style="margin-left:.5rem;font-weight:500;font-size:.83rem">— salary, skills, company stage, sort, and more</span>
+        </span>
+      </summary>
+      <div class="adv-body">
+
+        <!-- 💰 Compensation -->
+        <div class="filter-section">
+          <div class="filter-section-title">
+            <span class="filter-section-title-icon">💰</span> Compensation
           </div>
-        </label>
-        <label style="display:flex;align-items:center;gap:6px">
-          <input type="checkbox" name="visa_sponsorship" value="1"> Visa sponsorship required
-        </label>
-        <label style="display:flex;align-items:center;gap:6px">
-          <input type="checkbox" name="jobs_for_women" value="1"> Jobs for women
-        </label>
-        <label>Sort by
-          <select name="sort_by" style="width:100%;padding:5px">
-            <option value="score">Match score (default)</option>
-            <option value="recent">Most recent</option>
-            <option value="title">Title A → Z</option>
-          </select>
-        </label>
+          <div class="filter-grid">
+            <label>Min annual salary (LPA)
+              <input name="min_salary" type="number" min="0" step="1" placeholder="e.g. 8">
+            </label>
+            <label>Min equity (%)
+              <input name="min_equity" type="number" min="0" max="100" step="0.1" placeholder="e.g. 0.25">
+            </label>
+            <label>Sort results by
+              <select name="sort_by">
+                <option value="score">Best match score</option>
+                <option value="recent">Most recent</option>
+                <option value="title">Title (A → Z)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <!-- 📅 Schedule & Mode -->
+        <div class="filter-section">
+          <div class="filter-section-title">
+            <span class="filter-section-title-icon">📅</span> Schedule &amp; Work mode
+          </div>
+          <div class="filter-grid">
+            <label>Date posted
+              <select name="date_posted">
+                <option value="">Any time</option>
+                <option value="1">Last 24 hours</option>
+                <option value="3">Last 3 days</option>
+                <option value="7">Last week</option>
+                <option value="30">Last month</option>
+              </select>
+            </label>
+            <label>Work mode
+              <select name="work_mode">
+                <option value="">Any work mode</option>
+                <option value="onsite">On-site</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="remote">Remote only</option>
+              </select>
+            </label>
+            <label>Job type
+              <select name="job_type">
+                <option value="">Any type</option>
+                <option value="fulltime">Full-time</option>
+                <option value="parttime">Part-time</option>
+                <option value="contract">Contract</option>
+                <option value="temporary">Temporary</option>
+                <option value="internship">Internship</option>
+                <option value="freelance">Freelance</option>
+              </select>
+            </label>
+            <label>Joining date
+              <select name="joining_date">
+                <option value="">Any</option>
+                <option value="immediate">Immediately</option>
+                <option value="within_1_month">Within 1 month</option>
+                <option value="flexible">Flexible</option>
+              </select>
+            </label>
+            <label>Notice period
+              <select name="notice_period">
+                <option value="">Any</option>
+                <option value="15">15 days</option>
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90">90 days</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <!-- 🏢 Company -->
+        <div class="filter-section">
+          <div class="filter-section-title">
+            <span class="filter-section-title-icon">🏢</span> Company
+          </div>
+          <div class="filter-grid">
+            <label>Employee count
+              <select name="employee_count">
+                <option value="">Any</option>
+                <option value="1-10">1–10</option>
+                <option value="11-50">11–50</option>
+                <option value="51-200">51–200</option>
+                <option value="201-500">201–500</option>
+                <option value="501-1000">501–1,000</option>
+                <option value="1001-5000">1,001–5,000</option>
+                <option value="5000+">5,000+</option>
+              </select>
+            </label>
+            <label>Company stage / Funding
+              <select name="company_stage">
+                <option value="">Any</option>
+                <option value="seed">Seed</option>
+                <option value="series-a">Series A</option>
+                <option value="series-b">Series B</option>
+                <option value="series-c">Series C+</option>
+                <option value="public">Public</option>
+              </select>
+            </label>
+            <label>Industry
+              <input name="industry" placeholder="e.g. FinTech, HealthTech, SaaS">
+            </label>
+            <div class="full">
+              <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:.5rem">
+                Company priority order
+                <span class="muted" style="font-weight:400">— overrides Company size above. 1st-preference career pages get scraped first.</span>
+              </div>
+              <div class="priority-row">
+                <div>
+                  <span class="priority-label">1st pick</span>
+                  <select name="priority_1">
+                    <option value="">— none —</option>
+                    <option value="startup">Startup / Unicorn (1–500)</option>
+                    <option value="midlevel">Mid-level / IT services (500–50k)</option>
+                    <option value="mnc">MNC (50k+)</option>
+                  </select>
+                </div>
+                <div>
+                  <span class="priority-label">2nd pick</span>
+                  <select name="priority_2">
+                    <option value="">— none —</option>
+                    <option value="startup">Startup / Unicorn</option>
+                    <option value="midlevel">Mid-level / IT services</option>
+                    <option value="mnc">MNC</option>
+                  </select>
+                </div>
+                <div>
+                  <span class="priority-label">3rd pick</span>
+                  <select name="priority_3">
+                    <option value="">— none —</option>
+                    <option value="startup">Startup / Unicorn</option>
+                    <option value="midlevel">Mid-level / IT services</option>
+                    <option value="mnc">MNC</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✅ Skills & Preferences -->
+        <div class="filter-section">
+          <div class="filter-section-title">
+            <span class="filter-section-title-icon">✅</span> Skills &amp; Preferences
+          </div>
+          <div class="filter-grid">
+            <label class="full">Required skills <span class="muted" style="font-weight:400">(comma-separated — jobs without these get filtered out)</span>
+              <input name="required_skills" placeholder="e.g. python, aws, react, kubernetes">
+            </label>
+            <label class="filter-check">
+              <input type="checkbox" name="visa_sponsorship" value="1"> 🛂 Visa sponsorship offered
+            </label>
+            <label class="filter-check">
+              <input type="checkbox" name="jobs_for_women" value="1"> 👩 Jobs for women
+            </label>
+          </div>
+        </div>
+
+        <p class="muted" style="margin:0;font-size:.78rem;text-align:center">
+          🔌 Date posted, Work mode, Job type, and Experience are injected into
+          <b>Naukri / LinkedIn / Indeed / Foundit / Glassdoor</b> URLs.
+          Salary, skills, and sort are applied to the displayed result list after scrape.
+        </p>
       </div>
-      <p class="muted" style="margin-top:6px;font-size:.8rem">Date posted, Work mode, Job type and Experience are injected into Naukri / LinkedIn / Indeed URLs where each site supports the parameter. Other filters are captured and applied to the displayed result list.</p>
     </details>
       </form>
     </div>
