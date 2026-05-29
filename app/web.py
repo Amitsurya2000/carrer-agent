@@ -390,6 +390,41 @@ _HEAD = """
    font-size:1.1rem;box-shadow:0 4px 10px rgba(79,70,229,.25);
  }
 
+ /* Custom file-picker button — gradient pill instead of ugly OS file input */
+ .file-picker{
+   display:inline-flex;align-items:center;gap:.5rem;cursor:pointer;
+   padding:9px 16px;border-radius:10px;font-weight:700;font-size:.92rem;
+   background:linear-gradient(135deg,var(--primary) 0%,#7c3aed 50%,#ec4899 100%);
+   color:#fff;border:none;
+   box-shadow:0 4px 14px rgba(124,58,237,.32);
+   transition:transform .15s, box-shadow .2s;
+ }
+ .file-picker:hover{
+   transform:translateY(-2px);
+   box-shadow:0 6px 20px rgba(124,58,237,.5);
+ }
+ .file-picker:active{ transform:translateY(0) scale(.98); }
+ .file-name-display{
+   display:inline-block;margin-left:.6rem;padding:6px 12px;
+   background:var(--surface-alt);border:1px dashed var(--border);
+   border-radius:8px;font-size:.85rem;color:var(--text-muted);
+   max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+   vertical-align:middle;
+ }
+ .file-name-display.has-file{
+   color:var(--text);background:var(--primary-light);
+   border-color:var(--primary);border-style:solid;font-weight:600;
+ }
+
+ /* Danger button for 'Clear results' */
+ button.danger{
+   background:rgba(239,68,68,.08);color:#ef4444;border:1px solid rgba(239,68,68,.3);
+   font-weight:600;
+ }
+ button.danger:hover{
+   background:#ef4444;color:#fff;border-color:#ef4444;
+ }
+
  a{color:var(--primary);text-decoration:none;font-weight:500}
  a:hover{text-decoration:underline}
 
@@ -815,12 +850,16 @@ def _page() -> str:
     #    no résumé at all, the two job cards are REPLACED by a single big
     #    "Upload to begin" CTA so the page is calm and obvious.
     if active:
+        clear_btn = (f"<form method='post' action='/ui/clear' style='display:inline;margin-left:.6rem' "
+                     f"onsubmit='return confirm(\"Clear all job results? Your résumé stays. You can re-upload to search again.\")'>"
+                     f"<button class='danger' type='submit' style='padding:5px 12px;font-size:.82rem'>🗑 Clear results</button></form>")
         job_block = f"""
 <div class="card">
   <h3>
-    <span style="display:flex;align-items:center"><span class="h3-icon">💼</span>
+    <span style="display:flex;align-items:center;flex-wrap:wrap"><span class="h3-icon">💼</span>
       <span>Active jobs <span style="background:linear-gradient(135deg,var(--primary),#ec4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;font-weight:800;font-size:1rem">— {active_count} match{('' if active_count == 1 else 'es')}</span></span>
-    </span>{_limit_dropdown('30')}
+    </span>
+    <span>{_limit_dropdown('30')}{clear_btn}</span>
   </h3>
   {_filter_pills_html()}
   <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
@@ -912,7 +951,11 @@ def _page() -> str:
 <div class="card">
   <h3>📄 Your résumé</h3>
   <form method="post" action="/ui/upload" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required>
+    <label class="file-picker" for="resume-file"><span style="font-size:1.1rem">📄</span> Choose résumé</label>
+    <input type="file" id="resume-file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required
+           style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden"
+           onchange="document.getElementById('resume-file-name').textContent = this.files[0] ? this.files[0].name : 'No file chosen'; document.getElementById('resume-file-name').classList.toggle('has-file', !!this.files[0]);">
+    <span id="resume-file-name" class="file-name-display">No file chosen</span>
     &nbsp;
     <input name="location" placeholder="Location (e.g. Bengaluru / Remote / India)" style="width:24%;padding:5px">
     &nbsp;
@@ -1341,6 +1384,15 @@ def api_jobs_count():
            .select("id", count="exact")
            .gt("score", 15).execute())
     return {"count": res.count or 0}
+
+
+@router.post("/ui/clear")
+def ui_clear():
+    """Manually wipe all non-applied jobs from the table without removing the
+    active résumé — used when the user wants a fresh empty state without
+    starting over with their profile."""
+    _clear_jobs()
+    return RedirectResponse("/", status_code=303)
 
 
 @router.post("/ui/status")
