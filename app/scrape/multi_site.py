@@ -623,9 +623,10 @@ def run() -> dict:
 
             print(f"  extracted: {len(jobs)} job cards")
             report.append({"site": site["name"], "result": f"{len(jobs)} jobs", "shot": str(shot)})
+            site_rows: list[dict] = []
             for j in jobs:
                 if j.get("url"):
-                    aggregated.append({
+                    row = {
                         "source": site["name"],
                         "url": j["url"],
                         "title": j.get("title") or "Untitled",
@@ -636,11 +637,27 @@ def run() -> dict:
                         "raw": {"query": q, "site": site["name"], "category": site["category"],
                                 "location_filter": FILTER_LOCATION,
                                 "company_size_filter": FILTER_COMPANY_SIZE},
-                    })
+                    }
+                    aggregated.append(row)
+                    site_rows.append(row)
             try: page.wait_for_timeout(3000)
             except Exception: pass
             try: browser.close()
             except Exception: pass
+
+        # ── Score & upsert THIS SITE's rows immediately so the home page
+        # polling sees them appear in real time, not at the end of the walk.
+        if site_rows:
+            for r in site_rows:
+                s, reason = keyword_score(skills, r)
+                r["score"] = s
+                r["score_reason"] = reason
+                r["status"] = "scored"
+            try:
+                get_supabase().table("jobs").upsert(site_rows, on_conflict="url").execute()
+                print(f"  ↳ saved {len(site_rows)} rows to DB (running total: {len(aggregated)})")
+            except Exception as e:
+                print(f"  ↳ DB upsert error: {str(e)[:80]}")
         time.sleep(0.7)
 
         # Early-stop: once we've collected at least SCRAPE_LIMIT unique URLs, end the walk.
@@ -649,16 +666,10 @@ def run() -> dict:
             print(f"\n  >>> Cap of {SCRAPE_LIMIT} jobs reached after site {i}. Stopping the walk.\n")
             break
 
+    # Final dedupe across the entire walk — each row was already scored & upserted
+    # per-site above; this block is now just for an honest end-of-run report.
     by_url = {r["url"]: r for r in aggregated}
     rows = list(by_url.values())
-    for r in rows:
-        s, reason = keyword_score(skills, r)
-        r["score"] = s
-        r["score_reason"] = reason
-        r["status"] = "scored"
-    if rows:
-        sb = get_supabase()
-        sb.table("jobs").upsert(rows, on_conflict="url").execute()
 
     print("\n" + "=" * 60)
     print("  PER-SITE REPORT")

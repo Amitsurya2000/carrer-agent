@@ -95,12 +95,57 @@ _HEAD = """
    --shadow-lg:0 12px 28px rgba(0,0,0,.6);
  }
  *{box-sizing:border-box}
+ html, body { position: relative; overflow-x: hidden; }
  body{
    font-family:'Inter',system-ui,-apple-system,Segoe UI,sans-serif;
    background:var(--bg);color:var(--text);
    max-width:1180px;margin:0 auto;padding:1.5rem;line-height:1.55;
    -webkit-font-smoothing:antialiased;transition:background .2s,color .2s;
  }
+
+ /* ----- Floating gradient blobs in the background (Stripe / Linear style) ----- */
+ .bg-blob{
+   position:fixed;border-radius:50%;filter:blur(110px);
+   opacity:.55;z-index:-1;pointer-events:none;
+   will-change:transform;
+ }
+ [data-theme='dark'] .bg-blob{ opacity:.35; }
+ .bg-blob-1{
+   width:560px;height:560px;top:-180px;left:-180px;
+   background:radial-gradient(circle, #4f46e5 0%, transparent 70%);
+   animation:floatA 22s ease-in-out infinite;
+ }
+ .bg-blob-2{
+   width:480px;height:480px;bottom:-140px;right:-120px;
+   background:radial-gradient(circle, #ec4899 0%, transparent 70%);
+   animation:floatB 26s ease-in-out infinite;
+ }
+ .bg-blob-3{
+   width:380px;height:380px;top:38%;right:-100px;
+   background:radial-gradient(circle, #06b6d4 0%, transparent 70%);
+   animation:floatC 30s ease-in-out infinite;
+ }
+ @keyframes floatA{
+   0%,100% { transform:translate(0,0) scale(1); }
+   50%     { transform:translate(120px,180px) scale(1.15); }
+ }
+ @keyframes floatB{
+   0%,100% { transform:translate(0,0) scale(1); }
+   50%     { transform:translate(-140px,-90px) scale(.85); }
+ }
+ @keyframes floatC{
+   0%,100% { transform:translate(0,0) scale(1); }
+   33%     { transform:translate(-80px,150px) scale(1.1); }
+   66%     { transform:translate(60px,-120px) scale(.9); }
+ }
+
+ /* Glassmorphism — cards float over the animated background */
+ .card{
+   backdrop-filter:blur(10px) saturate(1.2);
+   -webkit-backdrop-filter:blur(10px) saturate(1.2);
+ }
+ [data-theme='light'] .card{ background:rgba(255,255,255,.85); }
+ [data-theme='dark']  .card{ background:rgba(22,25,34,.78); }
  h1,h3{font-weight:700;letter-spacing:-.01em}
  h1{margin:0;font-size:1.85rem}
  h3{margin:0 0 1.1rem;font-size:1.1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem}
@@ -529,7 +574,10 @@ def _page() -> str:
 
     return f"""<!doctype html><html lang="en" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Career Agent</title>{_HEAD}</head><body>
+<title>AI Career Agent</title>{_HEAD}</head><body data-job-count="{active_count}">
+<div class="bg-blob bg-blob-1"></div>
+<div class="bg-blob bg-blob-2"></div>
+<div class="bg-blob bg-blob-3"></div>
 
 <header class="hero">
   <div>
@@ -781,6 +829,30 @@ function applyShowLimit(){{
   if (sel) {{ sel.value = saved; applyShowLimit(); }}
 }})();
 
+// ----- live job streaming: poll /api/jobs/count every ~7s, reload when it grows -----
+(function(){{
+  const initial = parseInt(document.body.dataset.jobCount || '0', 10);
+  let last = initial;
+  let stableTicks = 0;
+  async function tick(){{
+    try {{
+      const r = await fetch('/api/jobs/count', {{cache:'no-store'}});
+      const d = await r.json();
+      const n = d.count || 0;
+      if (n > last) {{
+        // New jobs landed — refresh so they appear in the table.
+        location.reload();
+        return;
+      }}
+      stableTicks = (n === last) ? stableTicks + 1 : 0;
+      last = n;
+      // Stop polling after ~3 min of stability — scrape is probably done.
+      if (stableTicks < 25) setTimeout(tick, 7000);
+    }} catch(e) {{ setTimeout(tick, 15000); }}
+  }}
+  setTimeout(tick, 7000);
+}})();
+
 // ----- estimated-time hint next to the Search dropdown -----
 const TIME_EST = {{
   '30':  '⏱ ~1–3 min',
@@ -949,6 +1021,20 @@ def ui_delete(profile_id: str = Form(...)):
 
 
 _VALID_STATUSES = {s for s, _ in _STATUS_OPTIONS}
+
+
+@router.get("/api/jobs/count")
+def api_jobs_count():
+    """Lightweight count endpoint the home-page JS polls every ~7s.
+
+    When this number bumps up (because the live per-site upsert in
+    multi_site.py landed new rows), the page reloads so the user sees the
+    new jobs streaming in without manually hitting refresh.
+    """
+    res = (get_supabase().table("jobs")
+           .select("id", count="exact")
+           .gt("score", 15).execute())
+    return {"count": res.count or 0}
 
 
 @router.post("/ui/status")
