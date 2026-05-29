@@ -146,9 +146,14 @@ _HEAD = """
  }
  [data-theme='light'] .card{ background:rgba(255,255,255,.85); }
  [data-theme='dark']  .card{ background:rgba(22,25,34,.78); }
- h1,h3{font-weight:700;letter-spacing:-.01em}
- h1{margin:0;font-size:1.85rem}
- h3{margin:0 0 1.1rem;font-size:1.1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem}
+ h1,h3{font-weight:800;letter-spacing:-.02em}
+ h1{margin:0;font-size:2.2rem;line-height:1.1}
+ h3{margin:0 0 1.1rem;font-size:1.15rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem}
+ .gradient-text{
+   background:linear-gradient(135deg,#fff 0%,#fce7f3 50%,#fff 100%);
+   -webkit-background-clip:text;background-clip:text;color:transparent;
+   -webkit-text-fill-color:transparent;
+ }
  .muted{color:var(--text-muted);font-size:.88rem}
 
  .hero{
@@ -171,18 +176,33 @@ _HEAD = """
  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:.9rem;margin-bottom:1.4rem}
  .stat{
    background:var(--surface);border-radius:var(--radius-sm);
-   padding:1rem 1.1rem;box-shadow:var(--shadow-sm);
+   padding:1.1rem 1.2rem;box-shadow:var(--shadow-sm);
    border:1px solid var(--border);border-left:4px solid var(--border);
-   transition:transform .15s, box-shadow .15s;
+   transition:transform .25s cubic-bezier(.4,0,.2,1), box-shadow .25s, border-color .15s;
+   position:relative;overflow:hidden;
  }
- .stat:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+ .stat::after{
+   content:'';position:absolute;inset:0;
+   background:linear-gradient(135deg, transparent 0%, rgba(255,255,255,.04) 50%, transparent 100%);
+   opacity:0;transition:opacity .3s;pointer-events:none;
+ }
+ .stat:hover{transform:translateY(-4px) scale(1.02);box-shadow:var(--shadow-lg)}
+ .stat:hover::after{opacity:1}
  .stat.primary{border-left-color:var(--primary)}
  .stat.success{border-left-color:var(--accent)}
  .stat.warn   {border-left-color:var(--warn)}
  .stat.info   {border-left-color:var(--info)}
  .stat.danger {border-left-color:var(--danger)}
- .stat-value{font-size:1.7rem;font-weight:700;color:var(--text);line-height:1.1}
- .stat-label{font-size:.74rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-top:.2rem}
+ .stat-value{
+   font-size:2.4rem;font-weight:800;line-height:1;letter-spacing:-.03em;
+   background:linear-gradient(135deg,var(--primary) 0%,#7c3aed 50%,#ec4899 100%);
+   -webkit-background-clip:text;background-clip:text;
+   -webkit-text-fill-color:transparent;color:transparent;
+ }
+ .stat.success .stat-value{background:linear-gradient(135deg,#10b981 0%,#34d399 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+ .stat.warn .stat-value   {background:linear-gradient(135deg,#f59e0b 0%,#fbbf24 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+ .stat.info .stat-value   {background:linear-gradient(135deg,#06b6d4 0%,#22d3ee 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+ .stat-label{font-size:.74rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-top:.3rem}
 
  .banner{
    background:linear-gradient(90deg,var(--primary-light),transparent);
@@ -200,8 +220,48 @@ _HEAD = """
 
  .card{
    background:var(--surface);border-radius:var(--radius);
-   padding:1.4rem 1.6rem;margin-bottom:1.4rem;
+   padding:1.5rem 1.7rem;margin-bottom:1.4rem;
    box-shadow:var(--shadow);border:1px solid var(--border);
+   transition:transform .35s cubic-bezier(.4,0,.2,1), box-shadow .35s;
+ }
+ .card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+
+ /* Platform marquee — scrolling row of all 108 platforms, just below the hero */
+ .marquee{
+   margin:0 0 1.4rem;border-radius:999px;
+   background:rgba(255,255,255,.6);backdrop-filter:blur(8px);
+   border:1px solid var(--border);padding:.55rem 0;
+   overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+ }
+ [data-theme='dark'] .marquee{background:rgba(22,25,34,.6)}
+ .marquee-track{
+   display:inline-flex;gap:1.6rem;white-space:nowrap;
+   animation:marquee 55s linear infinite;
+   font-size:.83rem;font-weight:600;color:var(--text-muted);
+ }
+ .marquee-track span{display:inline-flex;align-items:center;gap:.4rem}
+ @keyframes marquee{
+   from{transform:translateX(0)}
+   to  {transform:translateX(-50%)}
+ }
+
+ /* Score badge glow when strong match (≥ 70) */
+ .score-glow{
+   animation:scoreGlow 2.4s ease-in-out infinite;
+   box-shadow:0 0 0 0 rgba(10,125,40,.5);
+ }
+ @keyframes scoreGlow{
+   0%,100% { box-shadow:0 0 0 0 rgba(10,125,40,.0); }
+   50%     { box-shadow:0 0 0 6px rgba(10,125,40,.18); }
+ }
+
+ /* Emoji wiggle on hover (apply to .wiggle class) */
+ .wiggle{display:inline-block;transition:transform .3s}
+ .wiggle:hover{animation:wiggle .5s ease-in-out}
+ @keyframes wiggle{
+   0%,100% { transform:rotate(0deg); }
+   25%     { transform:rotate(-12deg) scale(1.1); }
+   75%     { transform:rotate(12deg) scale(1.1); }
  }
 
  table{border-collapse:collapse;width:100%;font-size:.88rem}
@@ -300,6 +360,33 @@ def _filter_pills_html() -> str:
     return ("<div style='margin:.4rem 0 1rem'><b style='font-size:.78rem;"
             "color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px'>"
             "Active filters</b><br>" + "".join(pills) + "</div>")
+
+
+_MARQUEE_PLATFORMS = [
+    "🟧 Naukri", "🟦 LinkedIn", "🟪 Wellfound", "🟫 Indeed", "🟨 Foundit",
+    "⚫ Shine", "🟢 Apna", "🟣 Internshala", "🟡 Glassdoor", "🔵 Hirist",
+    "🟤 Cutshort", "🟪 Instahyre", "🅻 Razorpay", "🍕 Zomato", "💸 PhonePe",
+    "💳 Cred", "🛒 Meesho", "🚕 Ola", "💱 Paytm", "🌿 Freshworks",
+    "📈 Zerodha", "📊 Groww", "📮 Postman", "🌐 Zoho", "🥡 Swiggy",
+    "📦 Flipkart", "🐦 BYJU's", "🎓 Unacademy", "🏏 Dream11", "✈️ MakeMyTrip",
+    "🛡 PolicyBazaar", "💄 Nykaa", "🏠 NoBroker", "🥗 PharmEasy", "💊 Practo",
+    "💧 boAt", "🛍 Mamaearth", "🅖 Google", "🪟 Microsoft", "🛒 Amazon",
+    "Ⓜ️ Meta", "🅰 Adobe", "💼 IBM", "🟩 Nvidia", "🍎 Apple", "🧡 Oracle",
+    "☁️ Salesforce", "🟦 SAP", "🌐 Cisco", "💼 Intel", "🚖 Uber", "🎬 Netflix",
+    "🏦 JPMorgan", "📊 Goldman", "🅖 Genpact", "🟪 Accenture", "🟦 TCS",
+    "🟨 Infosys", "🟩 Wipro", "🟥 HCL", "🌟 Capgemini",
+]
+
+
+def _platform_marquee_html() -> str:
+    """Infinite-scroll bar of all the platforms we scrape — visible just under
+    the hero. Looks like the 'as seen in' / 'trusted by' strip on every modern
+    startup landing page. CSS handles the loop; we duplicate the content so the
+    translateX(-50%) reset is invisible.
+    """
+    pills = "".join(f"<span>{html.escape(p)}</span>" for p in _MARQUEE_PLATFORMS)
+    return (f"<div class='marquee' aria-hidden='true'>"
+            f"<div class='marquee-track'>{pills}{pills}</div></div>")
 
 
 def _greeting() -> str:
@@ -446,15 +533,16 @@ def _limit_dropdown(current: str) -> str:
 
 
 def _score_badge(score) -> str:
-    """Color-coded pill: green ≥70, yellow 40-69, red <40."""
+    """Color-coded pill: green ≥70 (with pulse glow on ≥90), yellow 40-69, red <40."""
     if score is None:
         return "<span style='color:#888'>-</span>"
     s = int(score)
     if s >= 70:    bg = "#0a7d28"
     elif s >= 40:  bg = "#c69500"
     else:          bg = "#bb2222"
-    return (f"<span style='background:{bg};color:#fff;padding:2px 10px;"
-            f"border-radius:999px;font-weight:700;font-size:.85rem'>{s}</span>")
+    cls = " score-glow" if s >= 90 else ""
+    return (f"<span class='{cls.strip()}' style='background:{bg};color:#fff;padding:3px 11px;"
+            f"border-radius:999px;font-weight:700;font-size:.85rem;display:inline-block'>{s}</span>")
 
 
 def _status_dropdown(job_id: str, current: str | None) -> str:
@@ -558,7 +646,10 @@ def _page() -> str:
                     f"<b>108 platforms</b> &middot; <b>{active_count}</b> live matches found")
     else:
         subtitle = f"{greeting} &middot; Upload a résumé to scan 108 job platforms"
+    # When no résumé is active, hide the stat strip entirely — empty zeros
+    # everywhere are visual noise. The hero subtitle already nudges to upload.
     stats_strip = _stats_strip(active_jobs, active_count) if active else ""
+    marquee_html = ""  # placeholder; the marquee renders below the hero always — let HTML have it
     smart_banner = _smart_banner_html(active, active_jobs, active_count)
     vercel_banner = ('<div class="banner warn">☁️ <span><b>Hosted on Vercel.</b> '
                      'Uploads search Adzuna + Remotive + RemoteOK APIs (~2 s). For '
@@ -581,11 +672,13 @@ def _page() -> str:
 
 <header class="hero">
   <div>
-    <div class="hero-title"><span style="font-size:1.9rem">🎯</span><h1>AI Career Agent</h1></div>
+    <div class="hero-title"><span class="wiggle" style="font-size:2.2rem">🎯</span><h1 class="gradient-text">AI Career Agent</h1><span class="wiggle" style="font-size:1.4rem">✨</span></div>
     <p class="hero-subtitle">{subtitle}</p>
   </div>
   <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
 </header>
+
+{_platform_marquee_html()}
 
 {stats_strip}
 {smart_banner}
