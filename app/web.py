@@ -1011,6 +1011,65 @@ _SOURCE_COLORS = {
 
 
 import re as _re_extract
+from urllib.parse import quote_plus
+
+_KNOWN_DOMAINS = {
+    # Override pattern-guess for companies whose domain isn't "{slug}.com"
+    "razorpay": "razorpay.com", "swiggy": "swiggy.com", "zomato": "zomato.com",
+    "phonepe": "phonepe.com", "cred": "cred.club", "meesho": "meesho.com",
+    "ola": "olacabs.com", "paytm": "paytm.com", "freshworks": "freshworks.com",
+    "zerodha": "zerodha.com", "groww": "groww.in", "postman": "postman.com",
+    "zoho": "zoho.com", "flipkart": "flipkart.com", "byjus": "byjus.com",
+    "unacademy": "unacademy.com", "dream11": "dream11.com",
+    "makemytrip": "makemytrip.com", "policybazaar": "policybazaar.com",
+    "nykaa": "nykaa.com", "bharatpe": "bharatpe.com", "pinelabs": "pinelabs.com",
+    "urbancompany": "urbancompany.com", "lenskart": "lenskart.com",
+    "ola electric": "olaelectric.com",
+    # MNCs
+    "google": "google.com", "microsoft": "microsoft.com", "amazon": "amazon.com",
+    "meta": "meta.com", "facebook": "meta.com", "adobe": "adobe.com",
+    "ibm": "ibm.com", "nvidia": "nvidia.com", "apple": "apple.com",
+    "oracle": "oracle.com", "salesforce": "salesforce.com", "sap": "sap.com",
+    "cisco": "cisco.com", "intel": "intel.com", "qualcomm": "qualcomm.com",
+    "vmware": "vmware.com", "dell": "dell.com", "atlassian": "atlassian.com",
+    "servicenow": "servicenow.com", "snowflake": "snowflake.com",
+    "databricks": "databricks.com", "mongodb": "mongodb.com",
+    "uber": "uber.com", "netflix": "netflix.com",
+    # IT services
+    "tcs": "tcs.com", "infosys": "infosys.com", "wipro": "wipro.com",
+    "hcl": "hcl.com", "hcltech": "hcltech.com", "tech mahindra": "techmahindra.com",
+    "cognizant": "cognizant.com", "capgemini": "capgemini.com",
+    "mphasis": "mphasis.com", "ltimindtree": "ltimindtree.com",
+    "accenture": "accenture.com", "deloitte": "deloitte.com",
+    "jpmorgan": "jpmorganchase.com", "goldmansachs": "goldmansachs.com",
+    "morganstanley": "morganstanley.com", "citi": "citi.com",
+    "paypal": "paypal.com", "genpact": "genpact.com",
+}
+
+
+def _guess_company_domain(company: str) -> str | None:
+    if not company:
+        return None
+    key = company.lower().strip()
+    if key in _KNOWN_DOMAINS:
+        return _KNOWN_DOMAINS[key]
+    slug = _re_extract.sub(r"\W+", "", key)
+    if not slug or len(slug) < 2:
+        return None
+    return f"{slug}.com"
+
+
+def _hr_search_links(company: str) -> dict[str, str]:
+    """Build pre-filtered HR/recruiter search URLs the user can click to find
+    specific people at the company on Google, LinkedIn, and Bing."""
+    q = quote_plus(f'"{company}" ("talent acquisition" OR "HR" OR "recruiter" OR "hiring manager")')
+    li_q = quote_plus(f'{company} talent acquisition OR recruiter OR HR')
+    return {
+        "google":   f"https://www.google.com/search?q={q}+site%3Alinkedin.com%2Fin",
+        "linkedin": f"https://www.linkedin.com/search/results/people/?keywords={li_q}",
+        "bing":     f"https://www.bing.com/search?q={q}+site%3Alinkedin.com",
+    }
+
 
 _SKILL_VOCAB_SHORT = [
     "python", "java", "javascript", "typescript", "go ", "c++", "rust",
@@ -1113,10 +1172,36 @@ def _job_rows(jobs: list[dict]) -> str:
             chips.append(f"<span style='background:rgba(79,70,229,.12);color:#4338ca;padding:2px 7px;border-radius:4px;font-size:.72rem;font-weight:700'>📊 {html.escape(meta['experience'])}</span>")
         for skill in meta["skills"][:3]:
             chips.append(f"<span style='background:rgba(124,58,237,.08);color:#7c3aed;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:600'>🛠 {html.escape(skill)}</span>")
-        # HR emails found by contact_finder (clickable mailto)
-        hr_emails = (raw.get("hr_emails") or [])[:2]
-        for email in hr_emails:
-            chips.append(f"<a href='mailto:{html.escape(email)}' style='background:rgba(236,72,153,.12);color:#be185d;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:700;text-decoration:none'>📧 {html.escape(email)}</a>")
+        # HR emails: real ones found by contact_finder go first, then pattern-guesses
+        # so every row has SOMETHING to click. Guesses are clearly marked.
+        hr_emails = (raw.get("hr_emails") or [])
+        verified = bool(hr_emails)
+        if not hr_emails:
+            domain = _guess_company_domain(company)
+            if domain:
+                hr_emails = [f"careers@{domain}", f"hr@{domain}", f"talent@{domain}"]
+        for email in hr_emails[:2]:
+            tag = "" if verified else " (guess)"
+            bg = "rgba(236,72,153,.12)" if verified else "rgba(236,72,153,.06)"
+            title_text = "Verified email found on company website" if verified else "Pattern guess — verify before sending"
+            chips.append(
+                f"<a href='mailto:{html.escape(email)}' title='{title_text}' "
+                f"style='background:{bg};color:#be185d;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:700;text-decoration:none'>"
+                f"📧 {html.escape(email)}{html.escape(tag)}</a>"
+            )
+        # Search-HR shortcuts — open Google/LinkedIn pre-filtered for THIS company
+        if company:
+            links = _hr_search_links(company)
+            chips.append(
+                f"<a href='{links['google']}' target='_blank' rel='noopener' title='Open Google search for HR/recruiter at this company' "
+                f"style='background:rgba(16,163,127,.12);color:#15803d;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:700;text-decoration:none'>"
+                f"🔍 Find HR on Google</a>"
+            )
+            chips.append(
+                f"<a href='{links['linkedin']}' target='_blank' rel='noopener' title='Open LinkedIn people search for HR/recruiter at this company' "
+                f"style='background:rgba(10,102,194,.12);color:#0a66c2;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:700;text-decoration:none'>"
+                f"💼 LinkedIn</a>"
+            )
         if chips:
             title_html += "<div style='display:flex;gap:4px;flex-wrap:wrap;margin-top:5px'>" + "".join(chips) + "</div>"
 
