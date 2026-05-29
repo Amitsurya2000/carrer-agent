@@ -902,8 +902,13 @@ async def ui_upload(
         # scraper's per-site progress streams live into Render's Logs tab. The
         # child keeps these fds open even after the request handler returns
         # (start_new_session=True only detaches the process group, not the fds).
-        cmd_str = (f"{sys.executable} -m app.scrape.multi_site && "
-                   f"{sys.executable} -m app.scrape.hn_hiring")
+        #
+        # `python3` (PATH-resolved by the shell) is used INSTEAD of sys.executable
+        # because sys.executable in Microsoft's Playwright base image can point to
+        # a python that doesn't have playwright. The container's PATH `python3` is
+        # the same one the Dockerfile verifies playwright is importable from.
+        cmd_str = ("python3 -m app.scrape.multi_site && "
+                   "python3 -m app.scrape.hn_hiring")
         try:
             subprocess.Popen(
                 ["sh", "-c", cmd_str],

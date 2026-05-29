@@ -1,16 +1,12 @@
 # Production image for cloud deploys (Render, Railway, Fly.io, etc.).
 #
-# Uses Microsoft's official Playwright-Python image which ships with Chromium,
-# every required Linux shared library, AND the playwright Python package
-# pre-installed. The 108-site scrape runs out of the box on Render.
+# Built on Microsoft's official Playwright-Python image which ships Chromium,
+# all required Linux libs, AND the playwright Python package preinstalled.
 #
-# HEADLESS_BROWSER=1 is baked in so the scrapers know they're in the cloud and
-# launch Chromium with container-safe flags (no --start-maximized).
-#
-# We use `python3 -m ...` everywhere — pip install, build-time verification, and
-# the runtime CMD — so the SAME python3 interpreter is used by uvicorn AND by
-# every subprocess. Otherwise `sys.executable` in FastAPI ends up pointing to a
-# python without playwright and the scrape fails with ModuleNotFoundError.
+# We forcibly use `python3` everywhere — pip install, build-time checks,
+# and the runtime CMD — and we PRINT diagnostic info at build time so any
+# mismatch between the build-time python and the runtime python is visible
+# in the build logs instead of silently breaking with ModuleNotFoundError.
 FROM mcr.microsoft.com/playwright/python:v1.49.1-noble
 
 ENV PYTHONUNBUFFERED=1 \
@@ -20,15 +16,24 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-COPY requirements.txt .
+# ── Step 1: dump the python landscape so logs reveal which interpreter is which ──
+RUN echo "==== PYTHON LANDSCAPE BEFORE INSTALL ====" && \
+    echo "which python3:  $(which python3)" && \
+    echo "which python:   $(which python || echo none)" && \
+    echo "which pip3:     $(which pip3 || echo none)" && \
+    python3 --version && \
+    python3 -c "import sys; print('  sys.executable:', sys.executable)" && \
+    python3 -c "import playwright; print('  pre-install playwright location:', playwright.__file__)" || echo "  playwright NOT importable pre-install"
 
-# Install app deps using python3 explicitly. The base image already has
-# playwright + chromium, so we re-pin it here defensively and verify the SAME
-# python3 sees it — if it doesn't, the build fails loudly here instead of
-# silently breaking at scrape time.
-RUN python3 -m pip install --no-cache-dir -r requirements.txt \
- && python3 -m pip install --no-cache-dir playwright==1.49.1 \
- && python3 -c "from playwright.sync_api import sync_playwright; print('Playwright OK at build time')"
+# ── Step 2: install our deps + (re-)install playwright into the SAME python3 ──
+COPY requirements.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.txt && \
+    python3 -m pip install --no-cache-dir playwright==1.49.1
+
+# ── Step 3: verify playwright is importable by the SAME python3 that CMD will use ──
+RUN echo "==== POST-INSTALL VERIFICATION ====" && \
+    python3 -c "import playwright; print('  post-install playwright location:', playwright.__file__)" && \
+    python3 -c "from playwright.sync_api import sync_playwright; print('  Playwright IMPORT OK with the build python3 — runtime CMD uses the same python3')"
 
 COPY app ./app
 COPY supabase ./supabase
@@ -36,6 +41,7 @@ COPY supabase ./supabase
 ENV PORT=10000
 EXPOSE 10000
 
-# python3 -m uvicorn so sys.executable in the FastAPI process matches the
-# python3 the subprocess scrape relies on.
-CMD ["sh", "-c", "python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+# CMD uses `python3 -m uvicorn` so sys.executable in FastAPI is GUARANTEED
+# to be the same python3 that we just verified has playwright. Any subprocess
+# launched via subprocess.Popen([sys.executable, ...]) inherits it correctly.
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]
