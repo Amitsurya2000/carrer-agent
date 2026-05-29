@@ -897,18 +897,19 @@ async def ui_upload(
         # Render / Railway / Fly: detach the scrape so the HTTP request returns
         # IMMEDIATELY. Render's load balancer drops connections after ~100 s and
         # the browser would otherwise time out waiting for the 5-16 min walk.
-        # Output streams into scrape.log which shows up live in the Render dashboard.
-        log_path = _PROJ / "scrape.log"
+        #
+        # We do NOT redirect stdout/stderr — they inherit from uvicorn so the
+        # scraper's per-site progress streams live into Render's Logs tab. The
+        # child keeps these fds open even after the request handler returns
+        # (start_new_session=True only detaches the process group, not the fds).
         cmd_str = (f"{sys.executable} -m app.scrape.multi_site && "
                    f"{sys.executable} -m app.scrape.hn_hiring")
         try:
-            with open(log_path, "ab") as f:
-                subprocess.Popen(
-                    ["sh", "-c", cmd_str],
-                    cwd=str(_PROJ), env=env,
-                    stdout=f, stderr=f,
-                    start_new_session=True,  # detach from the request handler
-                )
+            subprocess.Popen(
+                ["sh", "-c", cmd_str],
+                cwd=str(_PROJ), env=env,
+                start_new_session=True,  # detach process group, keep stdout/stderr inherited
+            )
         except Exception:
             pass
     else:
