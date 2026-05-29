@@ -695,19 +695,23 @@ def run() -> dict:
             try: browser.close()
             except Exception: pass
 
-        # ── Score & upsert THIS SITE's rows immediately so the home page
-        # polling sees them appear in real time, not at the end of the walk.
+        # ── Score & upsert EACH JOB individually so the home page polling
+        # sees them appear in real time (one at a time, not as a batch).
         if site_rows:
+            sb_jobs = get_supabase().table("jobs")
+            saved_count = 0
             for r in site_rows:
                 s, reason = keyword_score(skills, r)
                 r["score"] = s
                 r["score_reason"] = reason
                 r["status"] = "scored"
-            try:
-                get_supabase().table("jobs").upsert(site_rows, on_conflict="url").execute()
-                print(f"  ↳ saved {len(site_rows)} rows to DB (running total: {len(aggregated)})")
-            except Exception as e:
-                print(f"  ↳ DB upsert error: {str(e)[:80]}")
+                try:
+                    sb_jobs.upsert([r], on_conflict="url").execute()
+                    saved_count += 1
+                except Exception as e:
+                    print(f"  ↳ DB upsert error: {str(e)[:80]}")
+            if saved_count:
+                print(f"  ↳ saved {saved_count} rows one-by-one (running total: {len(aggregated)})")
         time.sleep(0.7)
 
         # Early-stop: once we've collected at least SCRAPE_LIMIT unique URLs, end the walk.

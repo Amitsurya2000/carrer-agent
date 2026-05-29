@@ -531,6 +531,19 @@ _HEAD = """
  .reveal{ opacity:0;transform:translateY(20px);transition:opacity .6s ease, transform .6s ease; }
  .reveal.in{ opacity:1;transform:translateY(0); }
 
+ /* New-job slide-in: any row tagged .row-new flashes in with a green halo
+    then settles. Driven by the polling JS that tracks which ids weren't
+    in the previous tbody snapshot. */
+ @keyframes rowSlideIn{
+   0%   { opacity:0;transform:translateX(-14px);background:rgba(16,185,129,.18); }
+   60%  { opacity:1;transform:translateX(0); }
+   100% { background:transparent; }
+ }
+ tbody tr.row-new{
+   animation:rowSlideIn 1.4s ease-out forwards;
+   box-shadow:-3px 0 0 0 #10b981;
+ }
+
  /* ───── Live scrape feed panel (shown only when scrape is running) ───── */
  .live-feed{
    display:none;background:var(--surface);border-radius:14px;
@@ -1297,7 +1310,8 @@ def _job_rows(jobs: list[dict]) -> str:
         )
 
         row_cls = " class='hot-row'" if is_hot else ""
-        rows += (f"<tr{row_cls}>"
+        row_id = html.escape(str(j.get("id") or ""))
+        rows += (f"<tr data-job-id='{row_id}'{row_cls}>"
                  f"<td style='font-weight:700;color:var(--text-muted)'>{i}</td>"
                  f"<td>{_score_badge(j.get('score'))}</td>"
                  f"<td>{title_html}</td>"
@@ -1391,7 +1405,7 @@ def _page() -> str:
   </h3>
   {_filter_pills_html()}
   <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
-  <tbody>{active_html}</tbody></table>
+  <tbody id="activeJobsTbody">{active_html}</tbody></table>
 </div>
 
 <div class="card reveal">
@@ -1863,28 +1877,59 @@ function applyShowLimit(){{
   tick();
 }})();
 
-// ----- live job streaming: poll /api/jobs/count every ~7s, reload when it grows -----
+// ----- live job streaming: poll /api/jobs/count every ~4s, AJAX-swap the tbody
+//       when count changes. New rows get a green slide-in animation. -----
 (function(){{
-  const initial = parseInt(document.body.dataset.jobCount || '0', 10);
-  let last = initial;
+  let lastCount = parseInt(document.body.dataset.jobCount || '0', 10);
   let stableTicks = 0;
+  // Snapshot of currently-rendered job ids so we can mark only the NEW ones
+  // as .row-new (the rest stay in place, no animation flash).
+  function currentRowIds(){{
+    const tb = document.getElementById('activeJobsTbody');
+    if (!tb) return new Set();
+    return new Set(Array.from(tb.querySelectorAll('tr[data-job-id]'))
+                        .map(t => t.dataset.jobId));
+  }}
+  async function refreshTable(){{
+    const tb = document.getElementById('activeJobsTbody');
+    if (!tb) return;
+    try {{
+      const r = await fetch('/api/jobs/html', {{cache:'no-store'}});
+      if (!r.ok) return;
+      const newHtml = await r.text();
+      if (!newHtml || !newHtml.trim()) return;
+      const before = currentRowIds();
+      tb.innerHTML = newHtml;
+      // Tag only the rows that didn't exist before so the animation fires
+      // only on net-new jobs.
+      tb.querySelectorAll('tr[data-job-id]').forEach(tr => {{
+        if (!before.has(tr.dataset.jobId)) tr.classList.add('row-new');
+      }});
+      // After the animation completes, strip the class so re-renders don't
+      // flash everything green.
+      setTimeout(() => tb.querySelectorAll('tr.row-new').forEach(t => t.classList.remove('row-new')), 1600);
+      // Re-apply the 'Show: Top N' client-side cap to the freshly inserted rows.
+      if (typeof applyShowLimit === 'function') applyShowLimit();
+    }} catch(e) {{}}
+  }}
   async function tick(){{
     try {{
       const r = await fetch('/api/jobs/count', {{cache:'no-store'}});
       const d = await r.json();
       const n = d.count || 0;
-      if (n > last) {{
-        // New jobs landed — refresh so they appear in the table.
-        location.reload();
-        return;
+      if (n !== lastCount){{
+        await refreshTable();
+        stableTicks = 0;
+      }} else {{
+        stableTicks++;
       }}
-      stableTicks = (n === last) ? stableTicks + 1 : 0;
-      last = n;
-      // Stop polling after ~3 min of stability — scrape is probably done.
-      if (stableTicks < 25) setTimeout(tick, 7000);
-    }} catch(e) {{ setTimeout(tick, 15000); }}
+      lastCount = n;
+      // Slow down polling once nothing has changed for ~2 min (scrape done)
+      const next = stableTicks > 30 ? 15000 : 4000;
+      setTimeout(tick, next);
+    }} catch(e) {{ setTimeout(tick, 12000); }}
   }}
-  setTimeout(tick, 7000);
+  setTimeout(tick, 4000);
 }})();
 
 // ----- estimated-time hint next to the Search dropdown -----
@@ -2106,16 +2151,31 @@ def serve_shot(filename: str):
 
 @router.get("/api/jobs/count")
 def api_jobs_count():
-    """Lightweight count endpoint the home-page JS polls every ~7s.
-
-    When this number bumps up (because the live per-site upsert in
-    multi_site.py landed new rows), the page reloads so the user sees the
-    new jobs streaming in without manually hitting refresh.
-    """
+    """Lightweight count endpoint the home-page JS polls every ~4s.
+    When this number changes the JS calls /api/jobs/html and replaces
+    only the table body — no full page reload."""
     res = (get_supabase().table("jobs")
            .select("id", count="exact")
            .gt("score", 15).execute())
     return {"count": res.count or 0}
+
+
+@router.get("/api/jobs/html", response_class=HTMLResponse)
+def api_jobs_html():
+    """Returns just the inner HTML of the Active jobs <tbody> — so the page
+    can swap rows in without a full reload. Same query and filters as the
+    home page, scored by the active résumé's keyword score.
+    """
+    active = get_active()
+    if not active:
+        return HTMLResponse("")
+    jobs = (get_supabase().table("jobs")
+            .select("id,source,status,title,company,location,score,score_reason,raw,url,description")
+            .gt("score", 15)
+            .order("score", desc=True).limit(200).execute().data)
+    jobs = _apply_display_filters(jobs)
+    active_jobs = [j for j in jobs if not _is_expired(j)]
+    return HTMLResponse(_job_rows(active_jobs))
 
 
 @router.post("/ui/clear")
