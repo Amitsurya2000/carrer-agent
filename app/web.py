@@ -1277,8 +1277,15 @@ def _page() -> str:
            style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden"
            onchange="document.getElementById('resume-file-name').textContent = this.files[0] ? this.files[0].name : 'No file chosen'; document.getElementById('resume-file-name').classList.toggle('has-file', !!this.files[0]);">
     <span id="resume-file-name" class="file-name-display">No file chosen</span>
-    &nbsp;
-    <input name="location" placeholder="Location (e.g. Bengaluru / Remote / India)" style="width:24%;padding:5px">
+    <br><br>
+    <input name="role" placeholder="🎯 Role / Title to search (e.g. Computer Vision Engineer, Staff Nurse, Data Analyst…)"
+           style="width:100%;padding:11px 14px;font-size:.95rem;font-weight:500;border:2px solid var(--primary);border-radius:10px;background:var(--bg);box-shadow:0 0 0 4px rgba(79,70,229,.08);transition:box-shadow .15s,border-color .15s"
+           onfocus="this.style.boxShadow='0 0 0 4px rgba(79,70,229,.18)'"
+           onblur="this.style.boxShadow='0 0 0 4px rgba(79,70,229,.08)'">
+    <p class="muted" style="margin:.3rem 0 .9rem;font-size:.78rem">
+      Leave blank to auto-detect from résumé. If you type a role, Chromium will search for <b>exactly that role</b> on every platform (Naukri, LinkedIn, Razorpay, etc).
+    </p>
+    <input name="location" placeholder="📍 Location (e.g. Bengaluru / Remote / India)" style="width:24%;padding:5px">
     &nbsp;
     <select name="experience" style="padding:5px">
       <option value="">Any experience</option>
@@ -1709,6 +1716,7 @@ async def ui_upload(
     priority_1: str = Form(""),
     priority_2: str = Form(""),
     priority_3: str = Form(""),
+    role: str = Form(""),
 ):
     name = (file.filename or "").lower()
     if not name.endswith(_ALLOWED):
@@ -1750,7 +1758,8 @@ async def ui_upload(
            "SCRAPE_LIMIT": scrape_n,
            "COMPANY_PRIORITY_1": (priority_1 or "").strip().lower(),
            "COMPANY_PRIORITY_2": (priority_2 or "").strip().lower(),
-           "COMPANY_PRIORITY_3": (priority_3 or "").strip().lower()}
+           "COMPANY_PRIORITY_3": (priority_3 or "").strip().lower(),
+           "FILTER_ROLE": (role or "").strip()}
 
     if IS_VERCEL:
         # Vercel can't run Chromium — fall back to API-source discovery.

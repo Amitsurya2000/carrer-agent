@@ -61,6 +61,11 @@ _LAUNCH_ARGS = (["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
 
 FILTER_LOCATION = os.environ.get("FILTER_LOCATION", "").strip()
 FILTER_COMPANY_SIZE = os.environ.get("FILTER_COMPANY_SIZE", "").strip().lower()
+# FILTER_ROLE — user-typed role/title from the upload form. When non-empty,
+# this overrides the auto-detected role from the résumé so Chromium searches
+# for EXACTLY what the user wants ("computer vision engineer", "staff nurse",
+# etc.) on every platform.
+FILTER_ROLE = os.environ.get("FILTER_ROLE", "").strip()
 FILTER_EXPERIENCE = os.environ.get("FILTER_EXPERIENCE", "").strip().lower()
 FILTER_DATE_POSTED = os.environ.get("FILTER_DATE_POSTED", "").strip()  # "1" / "3" / "7" / "30"
 FILTER_WORK_MODE = os.environ.get("FILTER_WORK_MODE", "").strip().lower()  # "onsite" / "hybrid" / "remote"
@@ -582,11 +587,18 @@ def run() -> dict:
     if not active:
         print("No active résumé — upload one first.")
         return {"jobs": 0}
-    qs = derive_queries(active)
-    q = qs[0] if qs else "data scientist"
+    # If the user typed a role/title in the upload form, that wins over the
+    # résumé-derived one. Otherwise we auto-detect from the active résumé.
+    if FILTER_ROLE:
+        q = FILTER_ROLE
+        query_source = "user-typed"
+    else:
+        qs = derive_queries(active)
+        q = qs[0] if qs else "data scientist"
+        query_source = "auto-detected from résumé"
     selected = _select_sites()
     priorities = _ranked_priorities()
-    print(f"Query:    {q!r}")
+    print(f"Query:    {q!r}  ({query_source})")
     print(f"Location: {FILTER_LOCATION or 'India (default)'}")
     if priorities:
         print(f"Priority: " + " > ".join(priorities) + "  (then boards)")
