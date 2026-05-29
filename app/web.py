@@ -30,6 +30,12 @@ _PROJ = Path(__file__).resolve().parent.parent
 # server, no subprocess access, and a 60-second function timeout — so the visible
 # Playwright walks are silently disabled and the UI falls back to API-only discovery.
 IS_VERCEL = bool(os.environ.get("VERCEL"))
+# IS_CLOUD = running in a headless cloud container (Render, Railway, Fly via our
+# Dockerfile which sets HEADLESS_BROWSER=1). The scrape works exactly like local
+# but launches DETACHED so the HTTP request returns immediately — Render's load
+# balancer drops connections after ~100s and the user's browser would time out
+# waiting for the 5-16 min scrape otherwise.
+IS_CLOUD = os.environ.get("HEADLESS_BROWSER", "").strip() == "1"
 
 
 def _visible_subprocess(cmd: list[str], env: dict | None = None, timeout: int = 300) -> None:
@@ -514,6 +520,12 @@ def _page() -> str:
                      'the 108-site visible Chromium walk, run the project locally '
                      'and double-click <code>start.bat</code>.</span></div>'
                      if IS_VERCEL else '')
+    cloud_banner = ('<div class="banner info">☁️ <span><b>Hosted on Render</b> &middot; '
+                    'After clicking Upload, the headless Chromium 108-site scrape '
+                    'runs <b>in the background</b> (no pop-up windows — cloud has no screen). '
+                    'Wait <b>3–5 minutes</b> then <b>refresh this page</b> to see new jobs. '
+                    'Live progress is in <i>Render dashboard → Logs tab</i>.</span></div>'
+                    if IS_CLOUD else '')
 
     return f"""<!doctype html><html lang="en" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -530,6 +542,7 @@ def _page() -> str:
 {stats_strip}
 {smart_banner}
 {vercel_banner}
+{cloud_banner}
 
 <div class="card">
   <h3>📄 Your résumé</h3>
@@ -855,37 +868,51 @@ async def ui_upload(
         "visa_sponsorship": visa_sponsorship, "jobs_for_women": jobs_for_women,
         "sort_by": sort_by or "score",
     })
+    # Build the filter env once — shared by all execution modes.
+    sl = (scrape_limit or "30").strip().lower()
+    scrape_n = "" if sl == "all" else (sl if sl.isdigit() else "30")
+    env = {**os.environ,
+           "FILTER_LOCATION": (location or "").strip(),
+           "FILTER_EXPERIENCE": (experience or "").strip(),
+           "FILTER_COMPANY_SIZE": (company_size or "").strip().lower(),
+           "FILTER_DATE_POSTED": (date_posted or "").strip(),
+           "FILTER_WORK_MODE": (work_mode or "").strip().lower(),
+           "FILTER_JOB_TYPE": (job_type or "").strip().lower(),
+           "FILTER_JOBS_FOR_WOMEN": "1" if jobs_for_women else "",
+           "FILTER_VISA_SPONSORSHIP": "1" if visa_sponsorship else "",
+           "SCRAPE_LIMIT": scrape_n,
+           "COMPANY_PRIORITY_1": (priority_1 or "").strip().lower(),
+           "COMPANY_PRIORITY_2": (priority_2 or "").strip().lower(),
+           "COMPANY_PRIORITY_3": (priority_3 or "").strip().lower()}
+
     if IS_VERCEL:
-        # On Vercel: no display, no subprocess, 60-second timeout. Use API-source
-        # discovery (Adzuna + Remotive + RemoteOK) which finishes in ~1-3 seconds.
+        # Vercel can't run Chromium — fall back to API-source discovery.
         try:
             active = get_active()
             run_discovery(queries=derive_queries(active) if active else None)
             score_pending_keyword()
         except Exception:
             pass
+    elif IS_CLOUD:
+        # Render / Railway / Fly: detach the scrape so the HTTP request returns
+        # IMMEDIATELY. Render's load balancer drops connections after ~100 s and
+        # the browser would otherwise time out waiting for the 5-16 min walk.
+        # Output streams into scrape.log which shows up live in the Render dashboard.
+        log_path = _PROJ / "scrape.log"
+        cmd_str = (f"{sys.executable} -m app.scrape.multi_site && "
+                   f"{sys.executable} -m app.scrape.hn_hiring")
+        try:
+            with open(log_path, "ab") as f:
+                subprocess.Popen(
+                    ["sh", "-c", cmd_str],
+                    cwd=str(_PROJ), env=env,
+                    stdout=f, stderr=f,
+                    start_new_session=True,  # detach from the request handler
+                )
+        except Exception:
+            pass
     else:
-        # SCRAPE_LIMIT stops the visible walk once we've collected N jobs.
-        # "all" means no cap.
-        sl = (scrape_limit or "30").strip().lower()
-        scrape_n = "" if sl == "all" else (sl if sl.isdigit() else "30")
-        env = {**os.environ,
-               "FILTER_LOCATION": (location or "").strip(),
-               "FILTER_EXPERIENCE": (experience or "").strip(),
-               "FILTER_COMPANY_SIZE": (company_size or "").strip().lower(),
-               "FILTER_DATE_POSTED": (date_posted or "").strip(),
-               "FILTER_WORK_MODE": (work_mode or "").strip().lower(),
-               "FILTER_JOB_TYPE": (job_type or "").strip().lower(),
-               "FILTER_JOBS_FOR_WOMEN": "1" if jobs_for_women else "",
-               "FILTER_VISA_SPONSORSHIP": "1" if visa_sponsorship else "",
-               "SCRAPE_LIMIT": scrape_n,
-               "COMPANY_PRIORITY_1": (priority_1 or "").strip().lower(),
-               "COMPANY_PRIORITY_2": (priority_2 or "").strip().lower(),
-               "COMPANY_PRIORITY_3": (priority_3 or "").strip().lower()}
-        # VISIBLE Playwright walk across MULTIPLE platforms — one Chromium window per site
-        # pops up in sequence (Naukri, LinkedIn, Wellfound, Indeed, Foundit, Razorpay).
-        # Timeouts cover the worst case: "Search All matches" can run ~16 min
-        # for the full 108-site sweep on a slow connection.
+        # Local: visible Chromium, blocking.
         _visible_subprocess(
             [sys.executable, "-m", "app.scrape.multi_site"],
             env=env, timeout=1200,
