@@ -1010,6 +1010,55 @@ _SOURCE_COLORS = {
 }
 
 
+import re as _re_extract
+
+_SKILL_VOCAB_SHORT = [
+    "python", "java", "javascript", "typescript", "go ", "c++", "rust",
+    "react", "node", "django", "flask", "fastapi", "spring", "vue", "angular",
+    "aws", "gcp", "azure", "docker", "kubernetes", "terraform",
+    "sql", "postgres", "mysql", "mongodb", "redis", "kafka", "spark",
+    "tensorflow", "pytorch", "machine learning", "computer vision", "nlp", "llm",
+    "html", "css", "tailwind", "sass",
+]
+
+
+def _extract_meta(job: dict) -> dict:
+    """Best-effort regex extraction of salary / experience / key skills
+    from a job's title + description + raw blob. Returns dict with the
+    pieces we have; missing fields are None."""
+    blob = " ".join(str(x or "") for x in (
+        job.get("title"), job.get("description"),
+        (job.get("raw") or {}).get("salary"),
+        (job.get("raw") or {}).get("snippet"),
+    )).lower()
+    out = {"salary": None, "experience": None, "skills": []}
+    if not blob:
+        return out
+    # SALARY — "8-12 LPA", "₹8,00,000", "$120k-180k", "Rs 8 lakh"
+    m = _re_extract.search(r"(\d{1,3}(?:[.,]\d{1,2})?)\s*[-–to]+\s*(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:lpa|lakh)", blob)
+    if m: out["salary"] = f"{m.group(1)}-{m.group(2)} LPA"
+    else:
+        m = _re_extract.search(r"(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:lpa|lakh)", blob)
+        if m: out["salary"] = f"{m.group(1)} LPA"
+    if not out["salary"]:
+        m = _re_extract.search(r"\$\s*(\d{2,3})\s*k?\s*[-–to]+\s*\$?\s*(\d{2,3})\s*k", blob)
+        if m: out["salary"] = f"${m.group(1)}k–${m.group(2)}k"
+    # EXPERIENCE — "3-5 years", "5+ years", "minimum 3 years"
+    m = _re_extract.search(r"(\d{1,2})\s*[-–]\s*(\d{1,2})\s*(?:\+\s*)?(?:years?|yrs?)", blob)
+    if m: out["experience"] = f"{m.group(1)}-{m.group(2)} yrs"
+    else:
+        m = _re_extract.search(r"(\d{1,2})\s*\+?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:experience|exp)", blob)
+        if m: out["experience"] = f"{m.group(1)}+ yrs"
+    # KEY SKILLS — top 4 from our vocab that appear in the blob
+    for s in _SKILL_VOCAB_SHORT:
+        if s in blob:
+            label = s.strip().replace("c++", "C++").title() if s != "c++" else "C++"
+            if label not in out["skills"]:
+                out["skills"].append(label)
+            if len(out["skills"]) == 4: break
+    return out
+
+
 def _source_pill(source: str | None) -> str:
     if not source:
         return ""
@@ -1055,6 +1104,17 @@ def _job_rows(jobs: list[dict]) -> str:
         # Hot match badge gets a fire emoji prefix on the title
         if is_hot:
             title_html = f"<span style='color:#ec4899;font-weight:800;font-size:.7rem;background:rgba(236,72,153,.12);padding:2px 7px;border-radius:4px;margin-right:6px;vertical-align:middle'>🔥 HOT</span>" + title_html
+        # Sub-row: extracted chips for salary / experience / skills
+        meta = _extract_meta(j)
+        chips = []
+        if meta["salary"]:
+            chips.append(f"<span style='background:rgba(16,185,129,.12);color:#059669;padding:2px 7px;border-radius:4px;font-size:.72rem;font-weight:700'>💰 {html.escape(meta['salary'])}</span>")
+        if meta["experience"]:
+            chips.append(f"<span style='background:rgba(79,70,229,.12);color:#4338ca;padding:2px 7px;border-radius:4px;font-size:.72rem;font-weight:700'>📊 {html.escape(meta['experience'])}</span>")
+        for skill in meta["skills"][:3]:
+            chips.append(f"<span style='background:rgba(124,58,237,.08);color:#7c3aed;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:600'>🛠 {html.escape(skill)}</span>")
+        if chips:
+            title_html += "<div style='display:flex;gap:4px;flex-wrap:wrap;margin-top:5px'>" + "".join(chips) + "</div>"
 
         apply_html = (
             f"<a href='{html.escape(url)}' target='_blank' rel='noopener' "
@@ -1285,7 +1345,7 @@ def _page() -> str:
     <p class="muted" style="margin:.3rem 0 .9rem;font-size:.78rem">
       Leave blank to auto-detect from résumé. If you type a role, Chromium will search for <b>exactly that role</b> on every platform (Naukri, LinkedIn, Razorpay, etc).
     </p>
-    <input name="location" placeholder="📍 Location (e.g. Bengaluru / Remote / India)" style="width:24%;padding:5px">
+    <input name="location" placeholder="📍 Locations (comma-separated, e.g. Bengaluru, Hyderabad, Mumbai)" style="width:36%;padding:5px">
     &nbsp;
     <select name="experience" style="padding:5px">
       <option value="">Any experience</option>
