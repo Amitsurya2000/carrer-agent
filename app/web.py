@@ -544,6 +544,11 @@ _HEAD = """
    box-shadow:-3px 0 0 0 #10b981;
  }
 
+ /* Hide the default <summary> disclosure triangle since we render our own ▾ */
+ details > summary{ list-style:none; }
+ details > summary::-webkit-details-marker{ display:none; }
+ details[open] > summary > .arrow-flip{ transform:rotate(180deg); }
+
  /* ───── Live scrape feed panel (shown only when scrape is running) ───── */
  .live-feed{
    display:none;background:var(--surface);border-radius:14px;
@@ -1150,12 +1155,16 @@ def _hr_panel_html(company: str, verified: list[str], guessed: list[str],
                    f"<div style='display:flex;gap:5px;flex-wrap:wrap'>{guess_chips}</div></div>") if guessed else ""
 
     return f"""
-<details style='margin-top:7px'>
-  <summary style='cursor:pointer;display:inline-flex;align-items:center;gap:.35rem;
-                  font-size:.74rem;font-weight:700;color:var(--primary);
-                  padding:3px 9px;border-radius:5px;
-                  background:rgba(79,70,229,.08);border:1px solid rgba(79,70,229,.18)'>
-    🔎 HR & contact details ▾
+<details style='margin-top:8px'>
+  <summary style='cursor:pointer;display:inline-flex;align-items:center;gap:.45rem;
+                  font-size:.88rem;font-weight:800;color:#fff;
+                  padding:7px 14px;border-radius:8px;list-style:none;
+                  background:linear-gradient(135deg,#ec4899 0%,#7c3aed 60%,var(--primary) 100%);
+                  box-shadow:0 4px 12px rgba(124,58,237,.25);
+                  transition:transform .15s, box-shadow .15s'
+           onmouseover='this.style.transform="translateY(-1px)";this.style.boxShadow="0 6px 16px rgba(124,58,237,.4)"'
+           onmouseout='this.style.transform="translateY(0)";this.style.boxShadow="0 4px 12px rgba(124,58,237,.25)"'>
+    📧 Click to see HR emails &amp; apply info  ▾
   </summary>
   <div style='margin-top:.5rem;padding:.8rem 1rem;background:var(--surface-alt);
               border:1px solid var(--border);border-radius:9px;font-size:.82rem'>
