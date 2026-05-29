@@ -212,14 +212,11 @@ def _clear_jobs() -> None:
 
 
 def _refresh_for_active() -> None:
-    """Clear old jobs, then search + score for the currently active résumé."""
-    active = get_active()
-    if not active:
-        _clear_jobs()
-        return
+    """Clear old jobs. The user must re-upload the active résumé to trigger a
+    fresh Chromium scrape — we don't auto-run Adzuna or any API source here.
+    Chromium-only is intentional.
+    """
     _clear_jobs()
-    run_discovery(queries=derive_queries(active))
-    score_pending_keyword()
 
 
 _FILTER_LABELS = {
