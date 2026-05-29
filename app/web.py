@@ -78,7 +78,7 @@ _SESSION_HAS_UPLOAD = {"v": False}
 _HEAD = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎯%3C/text%3E%3C/svg%3E">
 <style>
  :root{
@@ -235,8 +235,9 @@ _HEAD = """
  }
  [data-theme='light'] .card{ background:rgba(255,255,255,.85); }
  [data-theme='dark']  .card{ background:rgba(22,25,34,.78); }
- h1,h3{font-weight:800;letter-spacing:-.02em}
- h1{margin:0;font-size:2.2rem;line-height:1.1}
+ h1,h2,h3{font-family:'Manrope','Inter',system-ui,sans-serif;font-weight:800;letter-spacing:-.025em}
+ h1{margin:0;font-size:2.3rem;line-height:1.05}
+ h2{margin:0;font-size:1.6rem;line-height:1.15}
  h3{margin:0 0 1.1rem;font-size:1.15rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem}
  .gradient-text{
    background:linear-gradient(135deg,#fff 0%,#fce7f3 50%,#fff 100%);
@@ -432,6 +433,107 @@ _HEAD = """
    background:#ef4444;color:#fff;border-color:#ef4444;
  }
 
+ /* ───── Hero-style upload card layout ───── */
+ .upload-hero{
+   display:grid;grid-template-columns:1.4fr 1fr;gap:2rem;align-items:center;
+ }
+ @media (max-width:880px){ .upload-hero{ grid-template-columns:1fr; gap:1.4rem; } }
+
+ .how-flow{
+   display:flex;flex-direction:column;gap:.8rem;
+   padding:1.4rem;border-radius:14px;
+   background:linear-gradient(135deg, rgba(79,70,229,.06), rgba(236,72,153,.04));
+   border:1px solid var(--border);
+ }
+ .how-step{
+   display:flex;align-items:center;gap:.8rem;
+   padding:.5rem .6rem;border-radius:10px;
+   transition:background .2s;
+ }
+ .how-step:hover{ background:rgba(79,70,229,.06); }
+ .how-step-num{
+   flex-shrink:0;width:30px;height:30px;border-radius:50%;
+   background:linear-gradient(135deg,var(--primary),#ec4899);color:#fff;
+   font-weight:800;font-size:.88rem;
+   display:flex;align-items:center;justify-content:center;
+   box-shadow:0 3px 8px rgba(79,70,229,.25);
+ }
+ .how-step-text{font-size:.92rem;font-weight:500;color:var(--text)}
+ .how-step-sub{font-size:.78rem;color:var(--text-muted);margin-top:1px}
+
+ /* Premium primary CTA — replaces the .primary button on key actions */
+ button.cta, .cta{
+   padding:13px 28px;border-radius:12px;border:none;cursor:pointer;
+   background:linear-gradient(135deg,var(--primary) 0%,#7c3aed 50%,#ec4899 100%);
+   background-size:200% 200%;background-position:0% 50%;
+   color:#fff;font-family:inherit;font-weight:800;font-size:1rem;letter-spacing:-.01em;
+   box-shadow:0 8px 24px rgba(124,58,237,.35), inset 0 1px 0 rgba(255,255,255,.2);
+   transition:transform .2s, box-shadow .2s, background-position .35s;
+   position:relative;overflow:hidden;
+ }
+ button.cta:hover, .cta:hover{
+   transform:translateY(-2px);
+   background-position:100% 50%;
+   box-shadow:0 12px 32px rgba(124,58,237,.5), inset 0 1px 0 rgba(255,255,255,.3);
+ }
+ button.cta:active, .cta:active{ transform:translateY(0); }
+ button.cta::before, .cta::before{
+   content:'';position:absolute;inset:0;
+   background:linear-gradient(120deg, transparent 35%, rgba(255,255,255,.4) 50%, transparent 65%);
+   transform:translateX(-100%);transition:transform 0s;
+ }
+ button.cta:hover::before, .cta:hover::before{ transform:translateX(100%);transition:transform .9s; }
+
+ /* ───── Featured Match card — premium card shown above the table ───── */
+ .featured-match{
+   border-radius:16px;padding:1.6rem 1.8rem;margin-bottom:1.4rem;
+   background:linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%);
+   color:#fff;box-shadow:0 20px 50px rgba(79,70,229,.3);
+   position:relative;overflow:hidden;
+ }
+ .featured-match::before{
+   content:'';position:absolute;inset:0;
+   background:radial-gradient(circle at 20% 30%, rgba(255,255,255,.18), transparent 50%);
+   pointer-events:none;
+ }
+ .featured-label{
+   display:inline-flex;align-items:center;gap:.4rem;
+   background:rgba(255,255,255,.2);backdrop-filter:blur(6px);
+   color:#fff;padding:5px 12px;border-radius:999px;
+   font-size:.74rem;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+   margin-bottom:.7rem;
+ }
+ .featured-title{
+   font-size:1.5rem;font-weight:800;margin:0 0 .4rem;color:#fff;
+   font-family:'Manrope','Inter',sans-serif;letter-spacing:-.02em;
+ }
+ .featured-company{ font-size:1rem;opacity:.95;margin-bottom:.8rem; }
+ .featured-meta{
+   display:flex;flex-wrap:wrap;gap:1rem;font-size:.88rem;opacity:.92;
+   margin-bottom:1rem;
+ }
+ .featured-cta{
+   display:inline-block;background:#fff;color:var(--primary);
+   padding:10px 22px;border-radius:10px;font-weight:700;text-decoration:none;
+   box-shadow:0 4px 12px rgba(0,0,0,.15);transition:transform .15s;
+ }
+ .featured-cta:hover{transform:translateY(-2px);text-decoration:none;}
+ .featured-score{
+   position:absolute;top:1.4rem;right:1.6rem;
+   font-size:3.2rem;font-weight:800;line-height:1;
+   color:rgba(255,255,255,.95);font-family:'Manrope','Inter',sans-serif;
+   letter-spacing:-.04em;
+ }
+ .featured-score-label{
+   position:absolute;top:.8rem;right:1.7rem;
+   font-size:.66rem;font-weight:800;letter-spacing:1.2px;
+   color:rgba(255,255,255,.7);text-transform:uppercase;
+ }
+
+ /* Scroll-reveal: cards fade and rise on appearance */
+ .reveal{ opacity:0;transform:translateY(20px);transition:opacity .6s ease, transform .6s ease; }
+ .reveal.in{ opacity:1;transform:translateY(0); }
+
  a{color:var(--primary);text-decoration:none;font-weight:500}
  a:hover{text-decoration:underline}
 
@@ -519,6 +621,54 @@ def _filter_pills_html() -> str:
     return ("<div style='margin:.4rem 0 1rem'><b style='font-size:.78rem;"
             "color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px'>"
             "Active filters</b><br>" + "".join(pills) + "</div>")
+
+
+_HOW_IT_WORKS = [
+    ("📄", "Upload your résumé",     "PDF or DOCX • parsed in seconds"),
+    ("🎯", "Pick filters",            "Location, experience, company type"),
+    ("🚀", "We scan 108 platforms",   "Naukri, LinkedIn, Razorpay, Google…"),
+    ("✨", "Ranked matches",          "Scored by skill overlap, live-streamed"),
+]
+
+
+def _how_it_works_html() -> str:
+    steps = "".join(
+        f"<div class='how-step'>"
+        f"<div class='how-step-num'>{html.escape(emoji)}</div>"
+        f"<div><div class='how-step-text'>{html.escape(t)}</div>"
+        f"<div class='how-step-sub'>{html.escape(sub)}</div></div></div>"
+        for emoji, t, sub in _HOW_IT_WORKS
+    )
+    return f"<div class='how-flow'>{steps}</div>"
+
+
+def _featured_match_html(jobs: list[dict]) -> str:
+    """Premium hero card showing the single best matching job above the table.
+    Only renders when there's at least one job with score >= 60."""
+    if not jobs:
+        return ""
+    top = max(jobs, key=lambda j: int(j.get("score") or 0))
+    score = int(top.get("score") or 0)
+    if score < 60:
+        return ""
+    url = html.escape(top.get("url") or "#")
+    title = html.escape((top.get("title") or "Untitled")[:90])
+    company = html.escape(top.get("company") or "")
+    location = html.escape(top.get("location") or "Remote / Anywhere")
+    source = html.escape(top.get("source") or "")
+    return f"""
+<div class="featured-match reveal">
+  <div class="featured-score-label">Top match</div>
+  <div class="featured-score">{score}</div>
+  <span class="featured-label">⭐ Your strongest match</span>
+  <h2 class="featured-title">{title}</h2>
+  <div class="featured-company">{('at <b>' + company + '</b>' if company else '')} {('· via ' + source if source else '')}</div>
+  <div class="featured-meta">
+    <span>📍 {location}</span>
+    <span>🎯 {score}/100 skill match</span>
+  </div>
+  <a class="featured-cta" href="{url}" target="_blank" rel="noopener">View this job →</a>
+</div>"""
 
 
 _MARQUEE_PLATFORMS = [
@@ -865,8 +1015,10 @@ def _page() -> str:
         clear_btn = (f"<form method='post' action='/ui/clear' style='display:inline;margin-left:.6rem' "
                      f"onsubmit='return confirm(\"Clear all job results? Your résumé stays. You can re-upload to search again.\")'>"
                      f"<button class='danger' type='submit' style='padding:5px 12px;font-size:.82rem'>🗑 Clear results</button></form>")
+        featured = _featured_match_html(active_jobs) if active_jobs else ""
         job_block = f"""
-<div class="card">
+{featured}
+<div class="card reveal">
   <h3>
     <span style="display:flex;align-items:center;flex-wrap:wrap"><span class="h3-icon">💼</span>
       <span>Active jobs <span style="background:linear-gradient(135deg,var(--primary),#ec4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;font-weight:800;font-size:1rem">— {active_count} match{('' if active_count == 1 else 'es')}</span></span>
@@ -878,7 +1030,7 @@ def _page() -> str:
   <tbody>{active_html}</tbody></table>
 </div>
 
-<div class="card">
+<div class="card reveal">
   <h3>
     <span style="display:flex;align-items:center"><span class="h3-icon" style="background:linear-gradient(135deg,#6b7280,#9ca3af)">📋</span>
       <span>Past / expired jobs <span class="muted" style="font-weight:500">— {past_count} (posted &gt; {_EXPIRE_DAYS} days ago)</span></span>
@@ -889,7 +1041,7 @@ def _page() -> str:
 </div>"""
     else:
         job_block = """
-<div class="card" style="text-align:center;padding:3.5rem 2rem;background:linear-gradient(135deg,rgba(79,70,229,.06) 0%,rgba(236,72,153,.04) 50%,rgba(6,182,212,.06) 100%);border:2px dashed var(--primary)">
+<div class="card reveal" style="text-align:center;padding:3.5rem 2rem;background:linear-gradient(135deg,rgba(79,70,229,.06) 0%,rgba(236,72,153,.04) 50%,rgba(6,182,212,.06) 100%);border:2px dashed var(--primary)">
   <div style="font-size:5rem;line-height:1;margin-bottom:.8rem" class="wiggle">🚀</div>
   <h2 style="margin:0 0 .6rem;font-size:1.9rem;font-weight:800" class="gradient-text-color">Ready to find your next role?</h2>
   <p class="muted" style="font-size:1rem;max-width:540px;margin:0 auto 1.4rem">
@@ -960,9 +1112,15 @@ def _page() -> str:
 {vercel_banner}
 {cloud_banner}
 
-<div class="card">
-  <h3>📄 Your résumé</h3>
-  <form method="post" action="/ui/upload" enctype="multipart/form-data">
+<div class="card reveal">
+  <div class="upload-hero">
+    <div>
+      <h2 style="margin:0 0 .3rem">Find your next role.</h2>
+      <p class="muted" style="font-size:.95rem;margin:0 0 1.2rem;max-width:480px">
+        Drop your résumé — we'll scan <b style="color:var(--primary)">108 platforms</b>
+        from Naukri to Google in minutes and rank every match by skill overlap.
+      </p>
+      <form method="post" action="/ui/upload" enctype="multipart/form-data">
     <label class="file-picker" for="resume-file"><span style="font-size:1.1rem">📄</span> Choose résumé</label>
     <input type="file" id="resume-file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required
            style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden"
@@ -993,7 +1151,7 @@ def _page() -> str:
     &nbsp;
     <span id="time-est" class="muted" style="font-size:.85rem"></span>
     <br><br>
-    <button class="primary" type="submit">🚀 Upload résumé + Search jobs</button>
+    <button class="cta" type="submit">🚀 Upload résumé + Search jobs</button>
     <details style="margin-top:12px">
       <summary style="cursor:pointer;color:#1d6ef0;font-weight:600">+ Advanced filters (date posted / job type / work mode / salary / skills / company stage / sort / …)</summary>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;padding:10px;background:#fafafa;border-radius:6px">
@@ -1117,8 +1275,13 @@ def _page() -> str:
       </div>
       <p class="muted" style="margin-top:6px;font-size:.8rem">Date posted, Work mode, Job type and Experience are injected into Naukri / LinkedIn / Indeed URLs where each site supports the parameter. Other filters are captured and applied to the displayed result list.</p>
     </details>
-  </form>
-  <p class="muted">Uploading opens visible Chromium windows that walk <b>up to ~108 platforms</b>: 15 job boards (Naukri, LinkedIn, Indeed, Foundit, Shine, Glassdoor, Apna, Internshala, JobsForHer, WorkIndia, Hirist, Cutshort, Instahyre, TimesJobs, Wellfound) + 46 Indian startups/unicorns (Razorpay, Zomato, PhonePe, Cred, Meesho, BYJU's, Unacademy, Dream11, MakeMyTrip, Nykaa, BharatPe, Urban Company, Lenskart, OYO, Acko, Practo, PharmEasy, etc.) + 15 IT services (TCS, Infosys, Wipro, HCL, Tech Mahindra, Cognizant, Capgemini, LTIMindtree, etc.) + 32 MNCs (Google, Microsoft, Amazon, Meta, Apple, Oracle, Salesforce, SAP, Cisco, Intel, Adobe, IBM, Nvidia, Atlassian, ServiceNow, Snowflake, Databricks, Uber, Netflix, JPMorgan, Goldman, Citi, Deloitte, Accenture, etc.). <b>Location</b> is injected into the URL of every site that supports it. <b>Company size</b> picks which career pages are scraped — Startup (~61 sites), Mid-level (~30 sites), MNC (~47 sites), or blank for all ~108. Boards always run.</p>
+      </form>
+    </div>
+    <div>
+      {_how_it_works_html()}
+    </div>
+  </div>
+  <p class="muted" style="margin-top:1.4rem;padding-top:1.2rem;border-top:1px solid var(--border)">Uploading opens visible Chromium windows that walk <b>up to ~108 platforms</b>: 15 job boards (Naukri, LinkedIn, Indeed, Foundit, Shine, Glassdoor, Apna, Internshala, JobsForHer, WorkIndia, Hirist, Cutshort, Instahyre, TimesJobs, Wellfound) + 46 Indian startups/unicorns (Razorpay, Zomato, PhonePe, Cred, Meesho, BYJU's, Unacademy, Dream11, MakeMyTrip, Nykaa, BharatPe, Urban Company, Lenskart, OYO, Acko, Practo, PharmEasy, etc.) + 15 IT services (TCS, Infosys, Wipro, HCL, Tech Mahindra, Cognizant, Capgemini, LTIMindtree, etc.) + 32 MNCs (Google, Microsoft, Amazon, Meta, Apple, Oracle, Salesforce, SAP, Cisco, Intel, Adobe, IBM, Nvidia, Atlassian, ServiceNow, Snowflake, Databricks, Uber, Netflix, JPMorgan, Goldman, Citi, Deloitte, Accenture, etc.). <b>Location</b> is injected into the URL of every site that supports it. <b>Company size</b> picks which career pages are scraped — Startup (~61 sites), Mid-level (~30 sites), MNC (~47 sites), or blank for all ~108. Boards always run.</p>
   <table><thead><tr><th>Resume</th><th>Keywords</th><th>Active</th><th></th></tr></thead>
   <tbody>{prof_rows}</tbody></table>
 </div>
@@ -1164,6 +1327,25 @@ function toggleTheme(){{
   document.documentElement.dataset.theme = saved;
   const btn = document.getElementById('themeBtn');
   if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+}})();
+
+// ----- IntersectionObserver: cards fade-and-rise on scroll into view -----
+(function(){{
+  const els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)){{ els.forEach(e=>e.classList.add('in')); return; }}
+  const obs = new IntersectionObserver((entries)=>{{
+    entries.forEach(en=>{{
+      if (en.isIntersecting){{ en.target.classList.add('in'); obs.unobserve(en.target); }}
+    }});
+  }}, {{rootMargin:'0px 0px -40px 0px', threshold:.05}});
+  els.forEach(e=>obs.observe(e));
+  // Above-the-fold elements: reveal immediately so they don't pop-in awkwardly
+  setTimeout(()=>{{
+    document.querySelectorAll('.reveal').forEach((e,i)=>{{
+      const r = e.getBoundingClientRect();
+      if (r.top < window.innerHeight) {{ setTimeout(()=>e.classList.add('in'), i*60); }}
+    }});
+  }}, 30);
 }})();
 
 // ----- 'Show: Top 30/70/All' — pure client-side row hiding, persists in localStorage -----
