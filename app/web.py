@@ -236,6 +236,11 @@ _HEAD = """
    -webkit-background-clip:text;background-clip:text;color:transparent;
    -webkit-text-fill-color:transparent;
  }
+ .gradient-text-color{
+   background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 50%,#ec4899 100%);
+   -webkit-background-clip:text;background-clip:text;color:transparent;
+   -webkit-text-fill-color:transparent;
+ }
  .muted{color:var(--text-muted);font-size:.88rem}
 
  .hero{
@@ -732,6 +737,41 @@ def _page() -> str:
     # everywhere are visual noise. The hero subtitle already nudges to upload.
     stats_strip = _stats_strip(active_jobs, active_count) if active else ""
     marquee_html = ""  # placeholder; the marquee renders below the hero always — let HTML have it
+
+    # ── Job-list block: only rendered when a résumé is active. When there's
+    #    no résumé at all, the two job cards are REPLACED by a single big
+    #    "Upload to begin" CTA so the page is calm and obvious.
+    if active:
+        job_block = f"""
+<div class="card">
+  <h3><span>💼 Active jobs <span style="color:var(--primary);font-weight:600;font-size:.9rem">— {active_count} match{('' if active_count == 1 else 'es')}</span></span>{_limit_dropdown('30')}</h3>
+  {_filter_pills_html()}
+  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
+  <tbody>{active_html}</tbody></table>
+</div>
+
+<div class="card">
+  <h3>📋 Past / expired jobs <span class="muted">— {past_count} (posted &gt; {_EXPIRE_DAYS} days ago)</span></h3>
+  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
+  <tbody>{past_html}</tbody></table>
+</div>"""
+    else:
+        job_block = """
+<div class="card" style="text-align:center;padding:3.5rem 2rem;background:linear-gradient(135deg,rgba(79,70,229,.06) 0%,rgba(236,72,153,.04) 50%,rgba(6,182,212,.06) 100%);border:2px dashed var(--primary)">
+  <div style="font-size:5rem;line-height:1;margin-bottom:.8rem" class="wiggle">🚀</div>
+  <h2 style="margin:0 0 .6rem;font-size:1.9rem;font-weight:800" class="gradient-text-color">Ready to find your next role?</h2>
+  <p class="muted" style="font-size:1rem;max-width:540px;margin:0 auto 1.4rem">
+    Drop your résumé in the form above and we'll scan <b>108 job platforms</b>
+    (Naukri · LinkedIn · Razorpay · Google · Adobe · TCS · and more),
+    score every match against your skills, and rank them here.
+  </p>
+  <p class="muted" style="font-size:.9rem;display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap">
+    <span>📄 Upload PDF or DOCX</span>
+    <span>🎯 Pick filters</span>
+    <span>🚀 Click Search</span>
+    <span>✨ See ranked jobs</span>
+  </p>
+</div>"""
     smart_banner = _smart_banner_html(active, active_jobs, active_count)
     vercel_banner = ('<div class="banner warn">☁️ <span><b>Hosted on Vercel.</b> '
                      'Uploads search Adzuna + Remotive + RemoteOK APIs (~2 s). For '
@@ -947,18 +987,7 @@ def _page() -> str:
   <tbody>{prof_rows}</tbody></table>
 </div>
 
-<div class="card">
-  <h3><span>💼 Active jobs <span style="color:var(--primary);font-weight:600;font-size:.9rem">— {active_count} match{('' if active_count == 1 else 'es')}</span></span>{_limit_dropdown('30')}</h3>
-  {_filter_pills_html()}
-  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
-  <tbody>{active_html}</tbody></table>
-</div>
-
-<div class="card">
-  <h3>📋 Past / expired jobs <span class="muted">— {past_count} (posted &gt; {_EXPIRE_DAYS} days ago)</span></h3>
-  <table><thead><tr><th>#</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Status</th><th>Apply</th></tr></thead>
-  <tbody>{past_html}</tbody></table>
-</div>
+{job_block}
 
 <footer class="muted" style="text-align:center;padding:1rem 0 2rem;font-size:.82rem">
   Built with FastAPI + Playwright + Supabase &middot; All matches are scored locally against your résumé skills.
