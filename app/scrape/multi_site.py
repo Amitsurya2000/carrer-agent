@@ -27,6 +27,28 @@ ROOT = Path(__file__).resolve().parents[2]
 SHOTS = ROOT / "shots"
 SHOTS.mkdir(exist_ok=True)
 
+# Live-feed state file — read by the FastAPI /api/scrape/state endpoint so
+# the home page can show a real-time panel of which site Chromium is on
+# right now and the screenshot it just took.
+SCRAPE_STATE = ROOT / "scrape_state.json"
+
+
+def _write_state(state: dict) -> None:
+    try:
+        import json
+        with open(SCRAPE_STATE, "w") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+
+def _clear_state() -> None:
+    try:
+        if SCRAPE_STATE.exists():
+            SCRAPE_STATE.unlink()
+    except Exception:
+        pass
+
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
@@ -584,6 +606,13 @@ def run() -> dict:
         print(f"  URL: {url}")
         print(f"  >>> opening a new Chromium WINDOW now...")
         print("=" * 60)
+        # Publish what we're doing right NOW so the live panel updates.
+        _write_state({
+            "current": i, "total": len(selected),
+            "site_name": site["name"], "category": site["category"],
+            "url": url, "screenshot": None,
+            "running": True, "jobs_running_total": len({r["url"] for r in aggregated}),
+        })
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=HEADLESS, args=_LAUNCH_ARGS)
@@ -623,6 +652,15 @@ def run() -> dict:
 
             print(f"  extracted: {len(jobs)} job cards")
             report.append({"site": site["name"], "result": f"{len(jobs)} jobs", "shot": str(shot)})
+            # Publish the screenshot we just took so the live panel can show it.
+            _write_state({
+                "current": i, "total": len(selected),
+                "site_name": site["name"], "category": site["category"],
+                "url": url, "screenshot": f"multi_{i}_{site['name']}.png",
+                "jobs_this_site": len(jobs),
+                "running": True,
+                "jobs_running_total": len({r["url"] for r in aggregated}) + len([j for j in jobs if j.get("url")]),
+            })
             site_rows: list[dict] = []
             for j in jobs:
                 if j.get("url"):
@@ -677,6 +715,7 @@ def run() -> dict:
     for r in report:
         print(f"  {r['site']:14}  ->  {r['result']}")
     print(f"\n  Total unique jobs saved to DB: {len(rows)}")
+    _clear_state()  # signal to /api/scrape/state that the walk is done
     return {"jobs": len(rows), "report": report}
 
 

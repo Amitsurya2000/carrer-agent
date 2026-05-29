@@ -531,6 +531,66 @@ _HEAD = """
  .reveal{ opacity:0;transform:translateY(20px);transition:opacity .6s ease, transform .6s ease; }
  .reveal.in{ opacity:1;transform:translateY(0); }
 
+ /* ───── Live scrape feed panel (shown only when scrape is running) ───── */
+ .live-feed{
+   display:none;background:var(--surface);border-radius:14px;
+   padding:1rem 1.2rem;margin-bottom:1.4rem;
+   box-shadow:0 8px 30px rgba(79,70,229,.18);
+   border:2px solid var(--primary);
+   position:relative;overflow:hidden;
+ }
+ .live-feed.active{ display:block; animation:liveFeedIn .35s ease-out; }
+ @keyframes liveFeedIn{ from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+ .live-feed::before{
+   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+   background:linear-gradient(180deg,#10b981,#22d3ee,#ec4899);
+   animation:livePulse 2s ease-in-out infinite;
+ }
+ @keyframes livePulse{0%,100%{opacity:.6}50%{opacity:1}}
+
+ .live-header{
+   display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem;flex-wrap:wrap;
+ }
+ .live-dot{
+   width:10px;height:10px;border-radius:50%;background:#ef4444;
+   animation:liveDot 1.1s ease-in-out infinite;flex-shrink:0;
+ }
+ @keyframes liveDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.4);opacity:.5}}
+ .live-title{
+   font-weight:800;font-size:1.05rem;color:var(--text);
+   font-family:'Manrope','Inter',sans-serif;letter-spacing:-.01em;
+ }
+ .live-progress{
+   background:var(--primary-light);color:var(--primary);
+   padding:3px 10px;border-radius:999px;font-weight:700;font-size:.8rem;
+ }
+ .live-site-pill{
+   background:linear-gradient(135deg,var(--primary),#ec4899);color:#fff;
+   padding:3px 11px;border-radius:6px;font-weight:700;font-size:.78rem;
+   text-transform:lowercase;letter-spacing:.3px;
+ }
+ .live-jobs-counter{
+   margin-left:auto;font-size:.85rem;font-weight:700;color:var(--accent);
+ }
+ .live-body{
+   display:grid;grid-template-columns:1.6fr 1fr;gap:1.2rem;align-items:start;
+ }
+ @media (max-width:760px){ .live-body{grid-template-columns:1fr} }
+ .live-shot-wrap{
+   border-radius:10px;overflow:hidden;border:1px solid var(--border);
+   background:var(--surface-alt);min-height:200px;position:relative;
+ }
+ .live-shot{ width:100%;display:block;transition:opacity .3s; }
+ .live-shot-fallback{
+   display:flex;align-items:center;justify-content:center;
+   height:200px;color:var(--text-muted);font-size:.9rem;
+ }
+ .live-meta{ font-size:.88rem;color:var(--text-muted); }
+ .live-meta-row{ display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px dashed var(--border); }
+ .live-meta-row:last-child{ border-bottom:none; }
+ .live-meta-key{ font-weight:600;color:var(--text-muted); }
+ .live-meta-val{ font-weight:700;color:var(--text);font-family:ui-monospace,monospace;font-size:.82rem; }
+
  /* ───── Advanced filters — modern sectioned layout (LinkedIn / Naukri style) ───── */
  details.adv-filters{
    margin-top:1.2rem;border-radius:14px;
@@ -1180,6 +1240,29 @@ def _page() -> str:
 {smart_banner}
 {vercel_banner}
 
+<!-- Live scrape feed: shown when /api/scrape/state reports a scrape is running. -->
+<div id="liveFeed" class="live-feed">
+  <div class="live-header">
+    <span class="live-dot"></span>
+    <span class="live-title">Scraping live</span>
+    <span class="live-site-pill" id="liveFeedSite">—</span>
+    <span class="live-progress" id="liveFeedProgress">— / —</span>
+    <span class="live-jobs-counter">📈 <span id="liveFeedJobs">0</span> jobs found</span>
+  </div>
+  <div class="live-body">
+    <div class="live-shot-wrap">
+      <img id="liveFeedShot" class="live-shot" alt="latest screenshot" style="display:none">
+      <div id="liveFeedFallback" class="live-shot-fallback">📸 Waiting for the next screenshot...</div>
+    </div>
+    <div class="live-meta">
+      <div class="live-meta-row"><span class="live-meta-key">Current site</span> <span class="live-meta-val" id="liveFeedSiteName">—</span></div>
+      <div class="live-meta-row"><span class="live-meta-key">Category</span>     <span class="live-meta-val" id="liveFeedCat">—</span></div>
+      <div class="live-meta-row"><span class="live-meta-key">URL</span>          <span class="live-meta-val" id="liveFeedUrl" style="font-size:.72rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</span></div>
+      <div class="live-meta-row"><span class="live-meta-key">Jobs this site</span><span class="live-meta-val" id="liveFeedThis">—</span></div>
+    </div>
+  </div>
+</div>
+
 <div class="card reveal">
   <div class="upload-hero">
     <div>
@@ -1493,6 +1576,50 @@ function applyShowLimit(){{
   if (sel) {{ sel.value = saved; applyShowLimit(); }}
 }})();
 
+// ----- live scrape feed: poll /api/scrape/state every 3s, show current site + screenshot -----
+(function(){{
+  const panel    = document.getElementById('liveFeed');
+  const dot      = document.querySelector('.live-dot');
+  const sitePill = document.getElementById('liveFeedSite');
+  const progress = document.getElementById('liveFeedProgress');
+  const jobs     = document.getElementById('liveFeedJobs');
+  const siteName = document.getElementById('liveFeedSiteName');
+  const cat      = document.getElementById('liveFeedCat');
+  const urlEl    = document.getElementById('liveFeedUrl');
+  const thisSite = document.getElementById('liveFeedThis');
+  const shot     = document.getElementById('liveFeedShot');
+  const fallback = document.getElementById('liveFeedFallback');
+  if (!panel) return;
+  let lastShot = '';
+  async function tick(){{
+    try {{
+      const r = await fetch('/api/scrape/state', {{cache:'no-store'}});
+      const s = await r.json();
+      if (s.running){{
+        panel.classList.add('active');
+        sitePill.textContent  = s.site_name || '—';
+        progress.textContent  = (s.current || '—') + ' / ' + (s.total || '—');
+        jobs.textContent      = s.jobs_running_total || 0;
+        siteName.textContent  = s.site_name || '—';
+        cat.textContent       = s.category  || '—';
+        urlEl.textContent     = s.url       || '—';
+        thisSite.textContent  = (s.jobs_this_site !== undefined) ? s.jobs_this_site : '— (scraping)';
+        if (s.screenshot && s.screenshot !== lastShot){{
+          lastShot = s.screenshot;
+          shot.src = '/shots/' + s.screenshot + '?t=' + Date.now();
+          shot.onload  = () => {{ shot.style.display = 'block'; fallback.style.display = 'none'; }};
+          shot.onerror = () => {{ shot.style.display = 'none';  fallback.style.display = 'flex'; }};
+        }}
+      }} else {{
+        panel.classList.remove('active');
+        lastShot = '';
+      }}
+    }} catch(e) {{}}
+    setTimeout(tick, 3000);
+  }}
+  tick();
+}})();
+
 // ----- live job streaming: poll /api/jobs/count every ~7s, reload when it grows -----
 (function(){{
   const initial = parseInt(document.body.dataset.jobCount || '0', 10);
@@ -1689,6 +1816,40 @@ def ui_delete(profile_id: str = Form(...)):
 
 
 _VALID_STATUSES = {s for s, _ in _STATUS_OPTIONS}
+
+
+@router.get("/api/scrape/state")
+def api_scrape_state():
+    """Returns the current per-site state written by multi_site.py — what
+    Chromium is on right now, how many sites in, and which screenshot it
+    just took. Returns {running:false} when no scrape is active.
+    """
+    import json
+    state_file = _PROJ / "scrape_state.json"
+    if not state_file.exists():
+        return {"running": False}
+    try:
+        with open(state_file) as f:
+            return json.load(f)
+    except Exception:
+        return {"running": False}
+
+
+@router.get("/shots/{filename}")
+def serve_shot(filename: str):
+    """Serve PNG screenshots saved by the scrapers — used by the live panel
+    to show what Chromium just saw on each site. Locked to .png files in
+    the shots/ folder so it can't be abused as an arbitrary file reader.
+    """
+    from fastapi.responses import FileResponse
+    from fastapi import HTTPException
+    if "/" in filename or "\\" in filename or ".." in filename or not filename.endswith(".png"):
+        raise HTTPException(status_code=400, detail="bad filename")
+    p = _PROJ / "shots" / filename
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(p, media_type="image/png",
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/jobs/count")
